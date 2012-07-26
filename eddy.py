@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 
-import re
 from gi.repository import Gio, Gdk, Gtk
 
 def _(x):
@@ -23,7 +22,7 @@ class MenuItem(Gtk.Button):
 			# inside the button.
 		self.__grid.add(self.__icon)
 
-		self.__label = Gtk.Label()
+		self.__label = Gtk.Label(hexpand=True, use_underline=True)
 		self.__grid.add(self.__label)
 
 		self.__keyval_label = Gtk.Label()
@@ -81,7 +80,7 @@ class MenuItem(Gtk.Button):
 		self.__stock_id = stock_id
 
 def get_stock_label(stock_id):
-	return re.sub('_(.)', r'\1', Gtk.stock_lookup(stock_id).label)
+	return Gtk.stock_lookup(stock_id).label
 
 class Menu(Gtk.Grid):
 	'''

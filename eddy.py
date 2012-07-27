@@ -11,22 +11,24 @@ class MenuItem(Gtk.Button):
 		has a key associated with it and is activated by that key.
 		It goes inside a Menu.
 	'''
+	__icon_size_group = None
+
 	def __init__(self, label = None, stock_id = None, **props):
 		super().__init__(**props )
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(self.__grid)
 
-		self.__icon = Gtk.Image(expand=True)
-			# ⬑ ‘expand’ is needed to make everything centered
-			# inside the button.
-		self.__grid.add(self.__icon)
+		if MenuItem.__icon_size_group is None:
+			MenuItem.__icon_size_group = Gtk.SizeGroup(
+				Gtk.SizeGroupMode.VERTICAL )
+		self.__icon = None
 
 		self.__label = Gtk.Label(hexpand=True, use_underline=True)
-		self.__grid.add(self.__label)
+		self.__grid.attach(self.__label, 0, 1, 1, 1)
 
-		self.__keyval_label = Gtk.Label()
-		self.__grid.add(self.__keyval_label)
+		self.__keyval_label = Gtk.Label(hexpand=True)
+		self.__grid.attach(self.__keyval_label, 0, 2, 1, 1)
 
 		self.__stock_id = None
 		self.label = label
@@ -73,11 +75,20 @@ class MenuItem(Gtk.Button):
 		if stock_id is not None:
 			if len(self.__label.props.label) == 0:
 				self.label = get_stock_label(stock_id)
-			self.__icon.set_from_stock(stock_id, self.__icon_size)
+			icon = Gtk.Image.new_from_stock(
+				stock_id, self.__icon_size )
 		else:
-			self.__icon.set_from_stock(
-				Gtk.STOCK_MISSING_IMAGE, self.__icon_size )
+			icon = Gtk.Label()
+		icon.show()
+		self.__set_icon(icon)
 		self.__stock_id = stock_id
+
+	def __set_icon(self, icon):
+		if self.__icon is not None:
+			self.__grid.remove(self.__icon)
+		self.__icon = icon
+		MenuItem.__icon_size_group.add_widget(icon)
+		self.__grid.attach(icon, 0, 0, 1, 1)
 
 def get_stock_label(stock_id):
 	return Gtk.stock_lookup(stock_id).label
@@ -88,6 +99,7 @@ class Menu(Gtk.Grid):
 		like layout that can be activated by the corresponding keys.
 	'''
 	_keyvals = NotImplemented
+	_home_row = NotImplemented
 
 	def __init__(self, **props):
 		super().__init__(
@@ -99,6 +111,11 @@ class Menu(Gtk.Grid):
 		if type(self) == Menu:
 			raise NotImplementedError('Abstract class')
 		self.__buttons = {}
+		for r, c in self._home_row:
+			self.add_item(MenuItem(sensitive=False), r, c)
+
+	def attach_item(self, item, row, column):
+		self.attach(item,  4*column+row**2-row//2, row, 4, 1)
 
 	def add_item(self, item, row, column):
 		keyval = self._keyvals[row][column]
@@ -107,7 +124,10 @@ class Menu(Gtk.Grid):
 			Gtk.IconSize.LARGE_TOOLBAR if row == 1
 			else Gtk.IconSize.MENU )
 		item.show()
-		self.attach(item, 4*column+row**2-row//2, row, 4, 1)
+		if keyval in self.__buttons:
+			self.remove(self.__buttons[keyval])
+			del self.__buttons[keyval]
+		self.attach_item(item, row, column)
 		self.__buttons[keyval] = item
 
 	def remove_item(self, row, column):
@@ -115,6 +135,10 @@ class Menu(Gtk.Grid):
 		if keyval in self.__buttons:
 			self.remove(self.__buttons[keyval])
 			del self.__buttons[keyval]
+			if (row, column) in self._home_row:
+				b = Gtk.Button(sensitive=False)
+				b.show()
+				self.attach_item(b, row, column)
 
 	def key_press_event(self, event):
 		if event.keyval in self.__buttons:
@@ -131,6 +155,7 @@ class LMenu(Menu):
 		(	('q', 'w', 'e', 'r', 't'),
 			('a', 's', 'd', 'f', 'g'),
 			('z', 'x', 'c', 'v', 'b') ) ) )
+	_home_row = (1, 0), (1, 1), (1, 2), (1, 3)
 
 class RMenu(Menu):
 	_keyvals = tuple(map(
@@ -138,6 +163,7 @@ class RMenu(Menu):
 		(	('y', 'u', 'i', 'o', 'p', 'bracketleft', 'bracketright'),
 			('h', 'j', 'k', 'l', 'semicolon', 'apostrophe'),
 			('n', 'm', 'comma', 'period', 'slash') ) ) )
+	_home_row = (1, 1), (1, 2), (1, 3), (1, 4)
 
 class Editor(Gtk.ApplicationWindow):
 	def __init__(self, file=None, **props):
@@ -283,7 +309,7 @@ class Editor(Gtk.ApplicationWindow):
 
 	def _on_left(self):
 		self.__text_view.emit(
-			'move-cursor', Gtk.MovementStep.VISUAL_POSITiONS, -1,
+			'move-cursor', Gtk.MovementStep.VISUAL_POSITIONS, -1,
 			False )
 
 	def _on_right(self):

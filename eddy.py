@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-from gi.repository import Gio, Gdk, Gtk
+from gi.repository import GLib, Gio, Gdk, Gtk
 
 def _(x):
 	return x
@@ -11,29 +11,21 @@ class MenuItem(Gtk.Button):
 		has a key associated with it and is activated by that key.
 		It goes inside a Menu.
 	'''
-	__icon_size_group = None
-
-	def __init__(self, label = None, stock_id = None, **props):
+	def __init__(self, label = None, **props):
 		super().__init__(**props )
 
-		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
+		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
 		self.add(self.__grid)
 
-		if MenuItem.__icon_size_group is None:
-			MenuItem.__icon_size_group = Gtk.SizeGroup(
-				Gtk.SizeGroupMode.VERTICAL )
-		self.__icon = None
+		self.__label = Gtk.Label(
+			use_underline=True, hexpand=True,
+			halign=Gtk.Align.START )
+		self.__grid.add(self.__label)
 
-		self.__label = Gtk.Label(hexpand=True, use_underline=True)
-		self.__grid.attach(self.__label, 0, 1, 1, 1)
+		self.__keyval_label = Gtk.Label()
+		self.__grid.add(self.__keyval_label)
 
-		self.__keyval_label = Gtk.Label(hexpand=True)
-		self.__grid.attach(self.__keyval_label, 0, 2, 1, 1)
-
-		self.__stock_id = None
 		self.label = label
-		self.icon_size = Gtk.IconSize.LARGE_TOOLBAR
-		self.stock_id = stock_id
 		self.keyval = None
 
 		self.__grid.show_all()
@@ -44,54 +36,18 @@ class MenuItem(Gtk.Button):
 	@keyval.setter
 	def keyval(self, keyval):
 		if keyval is not None:
+			kvs = chr(Gdk.keyval_to_unicode(keyval))
 			self.__keyval_label.set_markup(
-				'<b>'+Gdk.keyval_name(keyval)+'</b>')
+				'<b> '+GLib.markup_escape_text(kvs)+'</b>' )
 		else:
 			self.__keyval_label.props.label = ''
-
-	@property
-	def icon_size(self):
-		return self.__icon_size
-	@icon_size.setter
-	def icon_size(self, icon_size):
-		self.__icon_size = icon_size
-		self.stock_id = self.__stock_id
 
 	@property
 	def label(self):
 		return self.__label.props.label
 	@label.setter
 	def label(self, label):
-		if label:
-			self.__label.set_markup('<small>'+label+'</small>')
-		else:
-			self.__label.props.label = ''
-
-	@property
-	def stock_id(self):
-		return self.__stock_id
-	@stock_id.setter
-	def stock_id(self, stock_id):
-		if stock_id is not None:
-			if len(self.__label.props.label) == 0:
-				self.label = get_stock_label(stock_id)
-			icon = Gtk.Image.new_from_stock(
-				stock_id, self.__icon_size )
-		else:
-			icon = Gtk.Label()
-		icon.show()
-		self.__set_icon(icon)
-		self.__stock_id = stock_id
-
-	def __set_icon(self, icon):
-		if self.__icon is not None:
-			self.__grid.remove(self.__icon)
-		self.__icon = icon
-		MenuItem.__icon_size_group.add_widget(icon)
-		self.__grid.attach(icon, 0, 0, 1, 1)
-
-def get_stock_label(stock_id):
-	return Gtk.stock_lookup(stock_id).label
+		self.__label.props.label = label
 
 class Menu(Gtk.Grid):
 	'''
@@ -175,31 +131,31 @@ class Editor(Gtk.ApplicationWindow):
 		self.__right_menu = RMenu(
 			expand=False, halign=Gtk.Align.END, no_show_all=True)
 		grid.add(self.__right_menu)
-		def add_R(stock, r, c, cb):
-			item = MenuItem(stock_id=stock)
+		def add_R(label, r, c, cb):
+			item = MenuItem(label)
 			self.__right_menu.add_item(item, r, c)
 			if cb is not None:
 				item.connect('clicked', lambda w: cb())
-		add_R(Gtk.STOCK_NEW, 0, 1, self._on_new)
-		add_R(Gtk.STOCK_CLOSE, 0, 2, self._on_close)
-		add_R(Gtk.STOCK_FIND, 1, 1, None)
+		add_R(_('New'), 0, 1, self._on_new)
+		add_R(_('Close'), 0, 2, self._on_close)
+		add_R(_('Find'), 1, 1, None)
 
 		self.__left_menu = LMenu(
 			expand=False, halign=Gtk.Align.START, no_show_all=True)
 		grid.add(self.__left_menu)
-		def add_L(stock, r, c, cb):
-			item = MenuItem(stock_id=stock)
+		def add_L(label, r, c, cb):
+			item = MenuItem(label)
 			self.__left_menu.add_item(item, r, c)
 			if cb is not None:
 				item.connect('clicked', lambda w: cb())
-		add_L(Gtk.STOCK_UNDO, 2, 0, None)
-		add_L(Gtk.STOCK_CUT, 2, 1, self._on_cut)
-		add_L(Gtk.STOCK_COPY, 2, 2, self._on_copy)
-		add_L(Gtk.STOCK_PASTE, 2, 3, self._on_paste)
-		add_L(Gtk.STOCK_GO_UP, 0, 2, self._on_up)
-		add_L(Gtk.STOCK_GO_BACK, 1, 1, self._on_left)
-		add_L(Gtk.STOCK_GO_DOWN, 1, 2, self._on_down)
-		add_L(Gtk.STOCK_GO_FORWARD, 1, 3, self._on_right)
+		add_L(_('Undo'), 2, 0, None)
+		add_L(_('Cut'), 2, 1, self._on_cut)
+		add_L(_('Copy'), 2, 2, self._on_copy)
+		add_L(_('Paste'), 2, 3, self._on_paste)
+		add_L('↑', 0, 2, self._on_up)
+		add_L('←', 1, 1, self._on_left)
+		add_L('↓', 1, 2, self._on_down)
+		add_L('→', 1, 3, self._on_right)
 
 		tv_scroller = Gtk.ScrolledWindow(
 			shadow_type=Gtk.ShadowType.IN, expand=True)

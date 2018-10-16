@@ -155,7 +155,8 @@ class RMenu(Menu):
 
 class Editor(Gtk.ApplicationWindow):
 	def __init__(self, file=None, **props):
-		super().__init__(**props)
+		super().__init__(
+			default_width=640, default_height=480, **props)
 
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)

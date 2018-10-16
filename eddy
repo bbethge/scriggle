@@ -127,8 +127,7 @@ def key_event_to_button_event(key_event, widget):
 	be.y = alloc.y + alloc.height//2
 	be.state = key_event.state
 	be.button = 1
-	be.device = (
-		widget.get_display().get_device_manager().get_client_pointer())
+	be.device = widget.get_display().get_default_seat().get_pointer()
 	be.x_root, be.y_root = win.get_root_coords(be.x, be.y)
 	return be
 

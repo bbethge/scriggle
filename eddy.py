@@ -12,7 +12,7 @@ class MenuItem(Gtk.Button):
 		It goes inside a Menu.
 	'''
 	def __init__(self, label = None, **props):
-		super().__init__(**props )
+		super().__init__(focus_on_click=False, **props)
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
 		self.add(self.__grid)
@@ -76,9 +76,6 @@ class Menu(Gtk.Grid):
 	def add_item(self, item, row, column):
 		keyval = self._keyvals[row][column]
 		item.keyval = keyval
-		item.icon_size = (
-			Gtk.IconSize.LARGE_TOOLBAR if row == 1
-			else Gtk.IconSize.MENU )
 		item.show()
 		if keyval in self.__buttons:
 			self.remove(self.__buttons[keyval])
@@ -96,14 +93,37 @@ class Menu(Gtk.Grid):
 				b.show()
 				self.attach_item(b, row, column)
 
-	def key_press_event(self, event):
+	def do_key_press_event(self, event):
+		return self.__key_event(event)
+
+	def do_key_release_event(self, event):
+		return self.__key_event(event)
+
+	def __key_event(self, event):
 		if event.keyval in self.__buttons:
-			self.__buttons[event.keyval].activate()
-			return True
+			b = self.__buttons[event.keyval]
+			return b.event(key_event_to_button_event(event, b))
 		return False
 
-	def key_release_event(self, event):
-		return False
+def key_event_to_button_event(key_event, widget):
+	be = Gdk.EventButton()
+	if key_event.type == Gdk.EventType.KEY_PRESS:
+		be.type = Gdk.EventType.BUTTON_PRESS
+	elif key_event.type == Gdk.EventType.KEY_RELEASE:
+		be.type = Gdk.EventType.BUTTON_RELEASE
+	win = widget.props.window
+	alloc = widget.get_allocation()
+	be.window = win
+	be.send_event = key_event.send_event
+	be.time = key_event.time
+	be.x = alloc.x + alloc.width//2
+	be.y = alloc.y + alloc.height//2
+	be.state = key_event.state
+	be.button = 1
+	be.device = (
+		widget.get_display().get_device_manager().get_client_pointer())
+	be.x_root, be.y_root = win.get_root_coords(be.x, be.y)
+	return be
 
 class LMenu(Menu):
 	_keyvals = tuple(map(
@@ -160,12 +180,11 @@ class Editor(Gtk.ApplicationWindow):
 		tv_scroller = Gtk.ScrolledWindow(
 			shadow_type=Gtk.ShadowType.IN, expand=True)
 
-		self.__text_view = Gtk.TextView()
+		self.__text_view = Gtk.TextView(expand=True)
 		tv_scroller.add(self.__text_view)
+		self.__text_view.connect('key-press-event', self._on_key_event)
 		self.__text_view.connect(
-			'key-press-event', self._on_key_press_event)
-		self.__text_view.connect(
-			'key-release-event', self._on_key_release_event)
+			'key-release-event', self._on_key_event)
 
 		if file is None:
 			grid.add(tv_scroller)
@@ -205,31 +224,27 @@ class Editor(Gtk.ApplicationWindow):
 	def buffer(self, buffer):
 		self.text_view.props.buffer = buffer
 
-	def _on_key_press_event(self, _text_view, event):
-		if event.keyval == Gdk.KEY_Control_L:
-			self.__right_menu.show()
+	def _on_key_event(self, _text_view, event):
+		if ( event.keyval == Gdk.KEY_Control_L
+				and not self.__left_menu.props.visible ):
+			self.__right_menu.props.visible = (
+				event.type == Gdk.EventType.KEY_PRESS )
 			return True
-		if (event.keyval == Gdk.KEY_Control_R
-				and not self.__right_menu.props.visible):
-			self.__left_menu.show()
-			return True
-		if self.__left_menu.props.visible:
-			return self.__left_menu.key_press_event(event)
-		if self.__right_menu.props.visible:
-			return self.__right_menu.key_press_event(event)
-		return False
-
-	def _on_key_release_event(self, _text_view, event):
-		if event.keyval == Gdk.KEY_Control_L:
-			self.__right_menu.hide()
-			return True
-		if event.keyval == Gdk.KEY_Control_R:
-			self.__left_menu.hide()
+		if ( event.keyval == Gdk.KEY_Control_R
+				and not self.__right_menu.props.visible ):
+			self.__left_menu.props.visible = (
+				event.type == Gdk.EventType.KEY_PRESS )
 			return True
 		if self.__left_menu.props.visible:
-			return self.__left_menu.key_release_event(event)
+			event = event.copy()
+			event.window = self.__left_menu.props.window
+			event.state &= ~Gdk.ModifierType.CONTROL_MASK
+			return self.__left_menu.event(event)
 		if self.__right_menu.props.visible:
-			return self.__right_menu.key_release_event(event)
+			event = event.copy()
+			event.window = self.__right_menu.props.window
+			event.state &= ~Gdk.ModifierType.CONTROL_MASK
+			return self.__right_menu.event(event)
 		return False
 
 	def _on_new(self):

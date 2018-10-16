@@ -304,23 +304,7 @@ class Application(Gtk.Application):
 	def __init__(self):
 		super().__init__(
 			application_id='com.example.Eddy',
-			flags=
-				Gio.ApplicationFlags.HANDLES_OPEN
-				| Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
-
-	def do_command_line(self, command_line):
-		'''
-			This is overridden only to work around the fact that do_open is
-			invoked incorrectly when called from C.
-		'''
-		args = command_line.get_arguments()
-		if len(args) <= 1:
-			self.activate()
-		else:
-			files = [
-				Gio.File.new_for_commandline_arg(arg)
-				for arg in args[1:]]
-			self.do_open(files, len(files), '')
+			flags=Gio.ApplicationFlags.HANDLES_OPEN)
 
 	def do_open(self, files, _n_files, _hint):
 		for file in files:

@@ -13,9 +13,8 @@ def _(x):
 
 class MenuItem(Gtk.Button):
 	'''
-		A button that looks somewhat like a large gtk.ToolButton but
-		has a key associated with it and is activated by that key.
-		It goes inside a Menu.
+		A button that has a key associated with it and is activated by
+		that key.  It goes inside a Menu.
 	'''
 	def __init__(self, **props):
 		super().__init__(focus_on_click=False, **props)
@@ -61,16 +60,14 @@ class Menu(Gtk.Grid):
 		A panel with several MenuItems arranged in a keyboard-
 		like layout that can be activated by the corresponding keys.
 	'''
+	# A sequence of sequences of keyvals representing the keys used to
+	# activate the MenuItems, organized by location.
 	_keyvals = NotImplemented
 
 	def __init__(self, **props):
 		super().__init__(
 			row_homogeneous=True, column_homogeneous=True,
-			hexpand=True,
-			events=
-				Gdk.EventMask.KEY_PRESS_MASK
-				| Gdk.EventMask.KEY_RELEASE_MASK,
-			**props)
+			hexpand=True, **props)
 		if type(self) == Menu:
 			raise NotImplementedError('Abstract class')
 		self.__items = {}
@@ -106,10 +103,10 @@ class Menu(Gtk.Grid):
 		del item.__handler_id
 
 	def do_key_press_event(self, event):
-		return self.__key_event(event)
+		return self.key_press(event.keyval)
 
 	def do_key_release_event(self, event):
-		return self.__key_event(event)
+		return self.key_press(event.keyval)
 
 	@staticmethod
 	def __key_coörds_to_grid_col(row, column):
@@ -119,32 +116,14 @@ class Menu(Gtk.Grid):
 		'''
 		return 4*column + row**2 - row//2
 
-	def __key_event(self, event):
-		if event.keyval in self.__items:
-			item = self.__items[event.keyval]
-			return item.event(
-				self.__key_event_to_button_event(event, item))
-		return False
-
-	@staticmethod
-	def __key_event_to_button_event(key_event, widget):
-		be = Gdk.EventButton()
-		if key_event.type == Gdk.EventType.KEY_PRESS:
-			be.type = Gdk.EventType.BUTTON_PRESS
-		elif key_event.type == Gdk.EventType.KEY_RELEASE:
-			be.type = Gdk.EventType.BUTTON_RELEASE
-		win = widget.props.window
-		alloc = widget.get_allocation()
-		be.window = win
-		be.send_event = key_event.send_event
-		be.time = key_event.time
-		be.x = alloc.x + alloc.width//2
-		be.y = alloc.y + alloc.height//2
-		be.state = key_event.state
-		be.button = 1
-		be.device = widget.get_display().get_default_seat().get_pointer()
-		be.x_root, be.y_root = win.get_root_coords(be.x, be.y)
-		return be
+	def key_press(self, keyval):
+		'''
+			Called to indicate a key has been pressed while
+			this menu was shown.  This is simpler than
+			using event signals.
+		'''
+		if keyval in self.__items:
+			self.__items[keyval].emit('clicked')
 
 
 class LMenu(Menu):
@@ -178,6 +157,9 @@ class RMenu(Menu):
 
 
 class Editor(Gtk.ApplicationWindow):
+	__ROW_TEXT_VIEW = 0
+	__ROW_MENU = 1
+
 	def __init__(self, file=None, **props):
 		super().__init__(
 			default_width=640, default_height=480, **props)
@@ -185,47 +167,10 @@ class Editor(Gtk.ApplicationWindow):
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
 
-		tv_scroller = Gtk.ScrolledWindow(
-			shadow_type=Gtk.ShadowType.IN, expand=True)
-
-		self.__text_view = Gtk.TextView(expand=True)
-		tv_scroller.add(self.__text_view)
-		self.__text_view.connect('key-press-event', self._on_key_event)
-		self.__text_view.connect('key-release-event', self._on_key_event)
-
-		if file is None:
-			grid.add(tv_scroller)
-		else:
-			hgrid= Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
-			label = Gtk.Label(_('Loading…'))
-			hgrid.add(label)
-			cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
-			hgrid.add(cancel_button)
-			grid.add(hgrid)
-			hgrid.show_all()
-
-			def callback(file, result, _data=None):
-				status, contents, _etag = (
-					file.load_contents_finish(result))
-				grid.remove(hgrid)
-				if status:
-					buffer = Gtk.TextBuffer()
-					buffer.set_text(str(contents, 'utf-8', 'replace'))
-					self.__text_view.props.buffer = buffer
-					tv_scroller.show_all()
-					grid.add(tv_scroller)
-				else:
-					label.props.label = _('Error!')
-					grid.add(label)
-
-			cancellable = Gio.Cancellable()
-			file.load_contents_async(cancellable, callback, None)
-			cancel_button.connect('clicked', lambda b: cancellable.cancel())
-
 		self.__menu_stack = Gtk.Stack()
 		self.__menu_stack.props.transition_type = (
 			Gtk.StackTransitionType.OVER_UP_DOWN)
-		grid.add(self.__menu_stack)
+		grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
 		self.__status_area = Gtk.Label('Status area')
 		self.__status_area.show_all()
@@ -237,13 +182,13 @@ class Editor(Gtk.ApplicationWindow):
 		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
 		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
 		self.__right_menu.bind_key(
-			_('Find'), lambda: print('“Find” activated'), 1, 1)
+			_('Find'), lambda b: print('“Find” activated'), 1, 1)
 
 		self.__left_menu = LMenu()
 		self.__left_menu.show_all()
 		self.__menu_stack.add(self.__left_menu)
 		self.__left_menu.bind_key(
-			_('Undo'), lambda: print('“Undo” activated'), 2, 0)
+			_('Undo'), lambda b: print('“Undo” activated'), 2, 0)
 		self.__left_menu.bind_key(_('Cut'), self._on_cut, 2, 1)
 		self.__left_menu.bind_key(_('Copy'), self._on_copy, 2, 2)
 		self.__left_menu.bind_key(_('Paste'), self._on_paste, 2, 3)
@@ -251,6 +196,48 @@ class Editor(Gtk.ApplicationWindow):
 		self.__left_menu.bind_key('←', self._on_left, 1, 1)
 		self.__left_menu.bind_key('↓', self._on_down, 1, 2)
 		self.__left_menu.bind_key('→', self._on_right, 1, 3)
+
+		tv_scroller = Gtk.ScrolledWindow(
+			shadow_type=Gtk.ShadowType.IN, expand=True)
+
+		self.__text_view = Gtk.TextView(expand=True)
+		tv_scroller.add(self.__text_view)
+		self.__text_view.connect('key-press-event', self._on_key_event)
+		self.__text_view.connect('key-release-event', self._on_key_event)
+
+		if file is None:
+			grid.attach(
+				tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
+		else:
+			hgrid= Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+			label = Gtk.Label(_('Loading…'))
+			hgrid.add(label)
+			cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
+			hgrid.add(cancel_button)
+			grid.attach(hgrid, 0, self.__ROW_TEXT_VIEW, 1, 1)
+			hgrid.show_all()
+
+			def callback(file, result, _data=None):
+				status, contents, _etag = (
+					file.load_contents_finish(result))
+				grid.remove(hgrid)
+				if status:
+					buffer = Gtk.TextBuffer()
+					buffer.set_text(str(contents, 'utf-8', 'replace'))
+					self.__text_view.props.buffer = buffer
+					tv_scroller.show_all()
+					grid.attach(
+						tv_scroller, 0,
+						self.__ROW_TEXT_VIEW, 1, 1)
+				else:
+					label.props.label = _('Error!')
+					grid.attach(
+						label, 0,
+						self.__ROW_TEXT_VIEW, 1, 1)
+
+			cancellable = Gio.Cancellable()
+			file.load_contents_async(cancellable, callback, None)
+			cancel_button.connect('clicked', lambda b: cancellable.cancel())
 
 		grid.show_all()
 
@@ -282,55 +269,51 @@ class Editor(Gtk.ApplicationWindow):
 				self.__menu_stack.props.visible_child = (
 					self.__status_area)
 			return True
-		if self.__menu_stack.props.visible_child is self.__left_menu:
-			event = event.copy()
-			event.window = self.__left_menu.props.window
-			event.state &= ~Gdk.ModifierType.CONTROL_MASK
-			return self.__left_menu.event(event)
-		if self.__menu_stack.props.visible_child is self.__right_menu:
-			event = event.copy()
-			event.window = self.__right_menu.props.window
-			event.state &= ~Gdk.ModifierType.CONTROL_MASK
-			return self.__right_menu.event(event)
+		if (self.__menu_stack.props.visible_child
+				is not self.__status_area
+				and event.type == Gdk.EventType.KEY_PRESS):
+			menu = self.__menu_stack.props.visible_child
+			menu.key_press(event.keyval)
+			return True
 		return False
 
-	def _on_new(self):
+	def _on_new(self, _button):
 		if self.props.application is not None:
 			self.props.application.activate()
 
-	def _on_close(self):
+	def _on_close(self, _button):
 		self.hide()
 		if self.props.application is not None:
 			self.props.application.remove_window(self)
 
-	def _on_cut(self):
+	def _on_cut(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
 		self.buffer.cut_clipboard(clip, True)
 
-	def _on_copy(self):
+	def _on_copy(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
 		self.buffer.copy_clipboard(clip)
 
-	def _on_paste(self):
+	def _on_paste(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
 		self.buffer.paste_clipboard(clip, None, True)
 
-	def _on_up(self):
+	def _on_up(self, _button):
 		self.__text_view.emit(
 			'move-cursor', Gtk.MovementStep.DISPLAY_LINES, -1,
 			False)
 
-	def _on_down(self):
+	def _on_down(self, _button):
 		self.__text_view.emit(
 			'move-cursor', Gtk.MovementStep.DISPLAY_LINES, 1,
 			False)
 
-	def _on_left(self):
+	def _on_left(self, _button):
 		self.__text_view.emit(
 			'move-cursor', Gtk.MovementStep.VISUAL_POSITIONS, -1,
 			False)
 
-	def _on_right(self):
+	def _on_right(self, _button):
 		self.__text_view.emit(
 			'move-cursor', Gtk.MovementStep.VISUAL_POSITIONS, 1,
 			False)

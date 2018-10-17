@@ -17,7 +17,7 @@ class MenuItem(Gtk.Button):
 		It goes inside a Menu.
 	'''
 	def __init__(self, **props):
-		super().__init__(focus_on_click=False, **props)
+		super().__init__(hexpand=True, focus_on_click=False, **props)
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
 		self.add(self.__grid)
@@ -65,6 +65,7 @@ class Menu(Gtk.Grid):
 	def __init__(self, **props):
 		super().__init__(
 			row_homogeneous=True, column_homogeneous=True,
+			hexpand=True,
 			events=
 				Gdk.EventMask.KEY_PRESS_MASK
 				| Gdk.EventMask.KEY_RELEASE_MASK,
@@ -153,6 +154,12 @@ class LMenu(Menu):
 			('a', 's', 'd', 'f', 'g'),
 			('z', 'x', 'c', 'v', 'b'))))
 
+	def __init__(self, **props):
+		super().__init__(**props)
+		spacer = Gtk.Label()
+		spacer.show()
+		self.attach(spacer, 23, 2, 4, 1)
+
 
 class RMenu(Menu):
 	_keyvals = tuple(map(
@@ -161,6 +168,12 @@ class RMenu(Menu):
 			('y', 'u', 'i', 'o', 'p', 'bracketleft', 'bracketright'),
 			('h', 'j', 'k', 'l', 'semicolon', 'apostrophe'),
 			('n', 'm', 'comma', 'period', 'slash'))))
+
+	def __init__(self, **props):
+		super().__init__(**props)
+		spacer = Gtk.Label()
+		spacer.show()
+		self.attach(spacer, -4, 0, 4, 1)
 
 
 class Editor(Gtk.ApplicationWindow):
@@ -171,16 +184,14 @@ class Editor(Gtk.ApplicationWindow):
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
 
-		self.__right_menu = RMenu(
-			expand=False, halign=Gtk.Align.END, no_show_all=True)
+		self.__right_menu = RMenu(no_show_all=True)
 		grid.add(self.__right_menu)
 		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
 		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
 		self.__right_menu.bind_key(
 			_('Find'), lambda: print('“Find” activated'), 1, 1)
 
-		self.__left_menu = LMenu(
-			expand=False, halign=Gtk.Align.START, no_show_all=True)
+		self.__left_menu = LMenu(no_show_all=True)
 		grid.add(self.__left_menu)
 		self.__left_menu.bind_key(
 			_('Undo'), lambda: print('“Undo” activated'), 2, 0)

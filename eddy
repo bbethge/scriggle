@@ -16,7 +16,7 @@ class MenuItem(Gtk.Button):
 		has a key associated with it and is activated by that key.
 		It goes inside a Menu.
 	'''
-	def __init__(self, label=None, **props):
+	def __init__(self, **props):
 		super().__init__(focus_on_click=False, **props)
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
@@ -30,10 +30,10 @@ class MenuItem(Gtk.Button):
 		self.__keyval_label = Gtk.Label()
 		self.__grid.add(self.__keyval_label)
 
-		self.label = label
-		self.keyval = None
-
 		self.__grid.show_all()
+
+		self.keyval = None
+		self.label = None
 
 	@property
 	def keyval(self):
@@ -61,43 +61,47 @@ class Menu(Gtk.Grid):
 		like layout that can be activated by the corresponding keys.
 	'''
 	_keyvals = NotImplemented
-	_home_row = NotImplemented
 
 	def __init__(self, **props):
 		super().__init__(
-			row_homogeneous=False, column_homogeneous=True,
+			row_homogeneous=True, column_homogeneous=True,
 			events=
 				Gdk.EventMask.KEY_PRESS_MASK
 				| Gdk.EventMask.KEY_RELEASE_MASK,
 			**props)
 		if type(self) == Menu:
 			raise NotImplementedError('Abstract class')
-		self.__buttons = {}
-		for r, c in self._home_row:
-			self.add_item(MenuItem(sensitive=False), r, c)
+		self.__items = {}
+		for row, row_contents in enumerate(self._keyvals):
+			for column in range(len(row_contents)):
+				self.__create_item(row, column)
 
-	def attach_item(self, item, row, column):
-		self.attach(item, 4*column + row**2 - row//2, row, 4, 1)
-
-	def add_item(self, item, row, column):
+	def __create_item(self, row, column):
 		keyval = self._keyvals[row][column]
+		item = MenuItem(sensitive=False)
 		item.keyval = keyval
 		item.show()
-		if keyval in self.__buttons:
-			self.remove(self.__buttons[keyval])
-			del self.__buttons[keyval]
-		self.attach_item(item, row, column)
-		self.__buttons[keyval] = item
+		self.attach(
+			item,
+			self.__key_coörds_to_grid_col(row, column), row, 4, 1)
+		self.__items[keyval] = item
 
-	def remove_item(self, row, column):
-		keyval = self._keyvals[row][column]
-		if keyval in self.__buttons:
-			self.remove(self.__buttons[keyval])
-			del self.__buttons[keyval]
-			if (row, column) in self._home_row:
-				b = Gtk.Button(sensitive=False)
-				b.show()
-				self.attach_item(b, row, column)
+	def __get_item(self, row, column):
+		return self.get_child_at(
+			self.__key_coörds_to_grid_col(row, column), row)
+
+	def bind_key(self, label, callback, row, column):
+		item = self.__get_item(row, column)
+		item.label = label
+		item.props.sensitive = True
+		item.__handler_id = item.connect('clicked', callback)
+
+	def unbind_key(self, row, column):
+		item = self.__get_item(row, column)
+		item.disconnect(item.__handler_id)
+		item.props.sensitive = False
+		item.label = None
+		del item.__handler_id
 
 	def do_key_press_event(self, event):
 		return self.__key_event(event)
@@ -105,31 +109,40 @@ class Menu(Gtk.Grid):
 	def do_key_release_event(self, event):
 		return self.__key_event(event)
 
+	@staticmethod
+	def __key_coörds_to_grid_col(row, column):
+		'''
+			Given the coördinates of a key, return the leftmost
+			column its button occupies in the grid.
+		'''
+		return 4*column + row**2 - row//2
+
 	def __key_event(self, event):
-		if event.keyval in self.__buttons:
-			b = self.__buttons[event.keyval]
-			return b.event(key_event_to_button_event(event, b))
+		if event.keyval in self.__items:
+			item = self.__items[event.keyval]
+			return item.event(
+				self.__key_event_to_button_event(event, item))
 		return False
 
-
-def key_event_to_button_event(key_event, widget):
-	be = Gdk.EventButton()
-	if key_event.type == Gdk.EventType.KEY_PRESS:
-		be.type = Gdk.EventType.BUTTON_PRESS
-	elif key_event.type == Gdk.EventType.KEY_RELEASE:
-		be.type = Gdk.EventType.BUTTON_RELEASE
-	win = widget.props.window
-	alloc = widget.get_allocation()
-	be.window = win
-	be.send_event = key_event.send_event
-	be.time = key_event.time
-	be.x = alloc.x + alloc.width//2
-	be.y = alloc.y + alloc.height//2
-	be.state = key_event.state
-	be.button = 1
-	be.device = widget.get_display().get_default_seat().get_pointer()
-	be.x_root, be.y_root = win.get_root_coords(be.x, be.y)
-	return be
+	@staticmethod
+	def __key_event_to_button_event(key_event, widget):
+		be = Gdk.EventButton()
+		if key_event.type == Gdk.EventType.KEY_PRESS:
+			be.type = Gdk.EventType.BUTTON_PRESS
+		elif key_event.type == Gdk.EventType.KEY_RELEASE:
+			be.type = Gdk.EventType.BUTTON_RELEASE
+		win = widget.props.window
+		alloc = widget.get_allocation()
+		be.window = win
+		be.send_event = key_event.send_event
+		be.time = key_event.time
+		be.x = alloc.x + alloc.width//2
+		be.y = alloc.y + alloc.height//2
+		be.state = key_event.state
+		be.button = 1
+		be.device = widget.get_display().get_default_seat().get_pointer()
+		be.x_root, be.y_root = win.get_root_coords(be.x, be.y)
+		return be
 
 
 class LMenu(Menu):
@@ -139,7 +152,6 @@ class LMenu(Menu):
 			('q', 'w', 'e', 'r', 't'),
 			('a', 's', 'd', 'f', 'g'),
 			('z', 'x', 'c', 'v', 'b'))))
-	_home_row = (1, 0), (1, 1), (1, 2), (1, 3)
 
 
 class RMenu(Menu):
@@ -149,7 +161,6 @@ class RMenu(Menu):
 			('y', 'u', 'i', 'o', 'p', 'bracketleft', 'bracketright'),
 			('h', 'j', 'k', 'l', 'semicolon', 'apostrophe'),
 			('n', 'm', 'comma', 'period', 'slash'))))
-	_home_row = (1, 1), (1, 2), (1, 3), (1, 4)
 
 
 class Editor(Gtk.ApplicationWindow):
@@ -163,31 +174,23 @@ class Editor(Gtk.ApplicationWindow):
 		self.__right_menu = RMenu(
 			expand=False, halign=Gtk.Align.END, no_show_all=True)
 		grid.add(self.__right_menu)
-		def add_R(label, r, c, cb):
-			item = MenuItem(label)
-			self.__right_menu.add_item(item, r, c)
-			if cb is not None:
-				item.connect('clicked', lambda w: cb())
-		add_R(_('New'), 0, 1, self._on_new)
-		add_R(_('Close'), 0, 2, self._on_close)
-		add_R(_('Find'), 1, 1, None)
+		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
+		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
+		self.__right_menu.bind_key(
+			_('Find'), lambda: print('“Find” activated'), 1, 1)
 
 		self.__left_menu = LMenu(
 			expand=False, halign=Gtk.Align.START, no_show_all=True)
 		grid.add(self.__left_menu)
-		def add_L(label, r, c, cb):
-			item = MenuItem(label)
-			self.__left_menu.add_item(item, r, c)
-			if cb is not None:
-				item.connect('clicked', lambda w: cb())
-		add_L(_('Undo'), 2, 0, None)
-		add_L(_('Cut'), 2, 1, self._on_cut)
-		add_L(_('Copy'), 2, 2, self._on_copy)
-		add_L(_('Paste'), 2, 3, self._on_paste)
-		add_L('↑', 0, 2, self._on_up)
-		add_L('←', 1, 1, self._on_left)
-		add_L('↓', 1, 2, self._on_down)
-		add_L('→', 1, 3, self._on_right)
+		self.__left_menu.bind_key(
+			_('Undo'), lambda: print('“Undo” activated'), 2, 0)
+		self.__left_menu.bind_key(_('Cut'), self._on_cut, 2, 1)
+		self.__left_menu.bind_key(_('Copy'), self._on_copy, 2, 2)
+		self.__left_menu.bind_key(_('Paste'), self._on_paste, 2, 3)
+		self.__left_menu.bind_key('↑', self._on_up, 0, 2)
+		self.__left_menu.bind_key('←', self._on_left, 1, 1)
+		self.__left_menu.bind_key('↓', self._on_down, 1, 2)
+		self.__left_menu.bind_key('→', self._on_right, 1, 3)
 
 		tv_scroller = Gtk.ScrolledWindow(
 			shadow_type=Gtk.ShadowType.IN, expand=True)

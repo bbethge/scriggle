@@ -202,8 +202,12 @@ class Editor(Gtk.ApplicationWindow):
 
 		self.__text_view = Gtk.TextView(expand=True)
 		tv_scroller.add(self.__text_view)
-		self.__text_view.connect('key-press-event', self._on_key_event)
-		self.__text_view.connect('key-release-event', self._on_key_event)
+		self.__text_view.connect(
+			'key-press-event', self._on_key_event)
+		self.__text_view.connect(
+			'key-release-event', self._on_key_event)
+		self.__text_view.connect(
+			'focus-out-event', self._on_focus_out_event)
 
 		if file is None:
 			grid.attach(
@@ -275,6 +279,10 @@ class Editor(Gtk.ApplicationWindow):
 			menu = self.__menu_stack.props.visible_child
 			menu.key_press(event.keyval)
 			return True
+		return False
+
+	def _on_focus_out_event(self, _text_view, event):
+		self.__menu_stack.props.visible_child = self.__status_area
 		return False
 
 	def _on_new(self, _button):

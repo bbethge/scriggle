@@ -3,6 +3,7 @@
 import gi
 gi.require_version('Gdk', '3.0')
 gi.require_version('Gtk', '3.0')
+gtk_minor_version = 14
 from gi.repository import GLib, Gio, Gdk, Gtk
 
 
@@ -184,25 +185,6 @@ class Editor(Gtk.ApplicationWindow):
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
 
-		self.__right_menu = RMenu(no_show_all=True)
-		grid.add(self.__right_menu)
-		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
-		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
-		self.__right_menu.bind_key(
-			_('Find'), lambda: print('“Find” activated'), 1, 1)
-
-		self.__left_menu = LMenu(no_show_all=True)
-		grid.add(self.__left_menu)
-		self.__left_menu.bind_key(
-			_('Undo'), lambda: print('“Undo” activated'), 2, 0)
-		self.__left_menu.bind_key(_('Cut'), self._on_cut, 2, 1)
-		self.__left_menu.bind_key(_('Copy'), self._on_copy, 2, 2)
-		self.__left_menu.bind_key(_('Paste'), self._on_paste, 2, 3)
-		self.__left_menu.bind_key('↑', self._on_up, 0, 2)
-		self.__left_menu.bind_key('←', self._on_left, 1, 1)
-		self.__left_menu.bind_key('↓', self._on_down, 1, 2)
-		self.__left_menu.bind_key('→', self._on_right, 1, 3)
-
 		tv_scroller = Gtk.ScrolledWindow(
 			shadow_type=Gtk.ShadowType.IN, expand=True)
 
@@ -240,6 +222,36 @@ class Editor(Gtk.ApplicationWindow):
 			file.load_contents_async(cancellable, callback, None)
 			cancel_button.connect('clicked', lambda b: cancellable.cancel())
 
+		self.__menu_stack = Gtk.Stack()
+		self.__menu_stack.props.transition_type = (
+			Gtk.StackTransitionType.OVER_UP_DOWN)
+		grid.add(self.__menu_stack)
+
+		self.__status_area = Gtk.Label('Status area')
+		self.__status_area.show_all()
+		self.__menu_stack.add(self.__status_area)
+
+		self.__right_menu = RMenu()
+		self.__right_menu.show_all()
+		self.__menu_stack.add(self.__right_menu)
+		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
+		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
+		self.__right_menu.bind_key(
+			_('Find'), lambda: print('“Find” activated'), 1, 1)
+
+		self.__left_menu = LMenu()
+		self.__left_menu.show_all()
+		self.__menu_stack.add(self.__left_menu)
+		self.__left_menu.bind_key(
+			_('Undo'), lambda: print('“Undo” activated'), 2, 0)
+		self.__left_menu.bind_key(_('Cut'), self._on_cut, 2, 1)
+		self.__left_menu.bind_key(_('Copy'), self._on_copy, 2, 2)
+		self.__left_menu.bind_key(_('Paste'), self._on_paste, 2, 3)
+		self.__left_menu.bind_key('↑', self._on_up, 0, 2)
+		self.__left_menu.bind_key('←', self._on_left, 1, 1)
+		self.__left_menu.bind_key('↓', self._on_down, 1, 2)
+		self.__left_menu.bind_key('→', self._on_right, 1, 3)
+
 		grid.show_all()
 
 	@property
@@ -251,21 +263,31 @@ class Editor(Gtk.ApplicationWindow):
 
 	def _on_key_event(self, _text_view, event):
 		if (event.keyval == Gdk.KEY_Control_L
-				and not self.__left_menu.props.visible):
-			self.__right_menu.props.visible = (
-				event.type == Gdk.EventType.KEY_PRESS)
+				and self.__menu_stack.props.visible_child
+					is not self.__left_menu):
+			if event.type == Gdk.EventType.KEY_PRESS:
+				self.__menu_stack.props.visible_child = (
+					self.__right_menu)
+			else:
+				self.__menu_stack.props.visible_child = (
+					self.__status_area)
 			return True
 		if (event.keyval == Gdk.KEY_Control_R
-				and not self.__right_menu.props.visible):
-			self.__left_menu.props.visible = (
-				event.type == Gdk.EventType.KEY_PRESS)
+				and self.__menu_stack.props.visible_child
+					is not self.__right_menu):
+			if event.type == Gdk.EventType.KEY_PRESS:
+				self.__menu_stack.props.visible_child = (
+					self.__left_menu)
+			else:
+				self.__menu_stack.props.visible_child = (
+					self.__status_area)
 			return True
-		if self.__left_menu.props.visible:
+		if self.__menu_stack.props.visible_child is self.__left_menu:
 			event = event.copy()
 			event.window = self.__left_menu.props.window
 			event.state &= ~Gdk.ModifierType.CONTROL_MASK
 			return self.__left_menu.event(event)
-		if self.__right_menu.props.visible:
+		if self.__menu_stack.props.visible_child is self.__right_menu:
 			event = event.copy()
 			event.window = self.__right_menu.props.window
 			event.state &= ~Gdk.ModifierType.CONTROL_MASK
@@ -334,4 +356,12 @@ class Application(Gtk.Application):
 
 if __name__ == '__main__':
 	import sys
+	if Gtk.get_minor_version() < gtk_minor_version:
+		dialog = Gtk.MessageDialog(
+			None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
+			Gtk.ButtonsType.CLOSE,
+			_('Eddy requires GTK+ version 3.{} or later').format(
+				gtk_minor_version))
+		dialog.run()
+		sys.exit(1)
 	sys.exit(Application().run(sys.argv))

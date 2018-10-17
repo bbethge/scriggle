@@ -17,7 +17,7 @@ class MenuItem(Gtk.Button):
 		that key.  It goes inside a Menu.
 	'''
 	def __init__(self, **props):
-		super().__init__(focus_on_click=False, **props)
+		super().__init__(**dict(focus_on_click=False, **props))
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
 		self.add(self.__grid)
@@ -65,9 +65,9 @@ class Menu(Gtk.Grid):
 	_keyvals = NotImplemented
 
 	def __init__(self, **props):
-		super().__init__(
+		super().__init__(**dict(
 			row_homogeneous=True, column_homogeneous=True,
-			hexpand=True, **props)
+			hexpand=True, **props))
 		if type(self) == Menu:
 			raise NotImplementedError('Abstract class')
 		self.__items = {}
@@ -161,8 +161,8 @@ class Editor(Gtk.ApplicationWindow):
 	__ROW_MENU = 1
 
 	def __init__(self, file=None, **props):
-		super().__init__(
-			default_width=640, default_height=480, **props)
+		super().__init__(**dict(
+			default_width=640, default_height=480, **props))
 
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)

@@ -233,6 +233,9 @@ class Editor(Gtk.ApplicationWindow):
 					grid.attach(
 						tv_scroller, 0,
 						self.__ROW_TEXT_VIEW, 1, 1)
+					self.__text_view.grab_focus()
+					buffer = self.__text_view.get_buffer()
+					buffer.place_cursor(buffer.get_start_iter())
 				else:
 					label.props.label = _('Error!')
 					grid.attach(

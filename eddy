@@ -17,7 +17,7 @@ class MenuItem(Gtk.Button):
 		It goes inside a Menu.
 	'''
 	def __init__(self, **props):
-		super().__init__(hexpand=True, focus_on_click=False, **props)
+		super().__init__(focus_on_click=False, **props)
 
 		self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
 		self.add(self.__grid)
@@ -158,7 +158,7 @@ class LMenu(Menu):
 		super().__init__(**props)
 		spacer = Gtk.Label()
 		spacer.show()
-		self.attach(spacer, 23, 2, 4, 1)
+		self.attach(spacer, 23, 2, 9, 1)
 
 
 class RMenu(Menu):

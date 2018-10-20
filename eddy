@@ -172,7 +172,7 @@ class Editor(Gtk.ApplicationWindow):
 			Gtk.StackTransitionType.OVER_UP_DOWN)
 		grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
-		self.__status_area = Gtk.Label('Status area')
+		self.__status_area = Gtk.Label()
 		self.__status_area.show_all()
 		self.__menu_stack.add(self.__status_area)
 
@@ -208,6 +208,10 @@ class Editor(Gtk.ApplicationWindow):
 			'key-release-event', self._on_key_event)
 		self.__text_view.connect(
 			'focus-out-event', self._on_focus_out_event)
+		tv_buffer = self.__text_view.get_buffer()
+		tv_buffer.connect('mark-set', self._on_mark_set)
+		tv_buffer.connect('changed', self._on_buffer_changed)
+		self._on_cursor_position_changed(tv_buffer.get_start_iter())
 
 		if file is None:
 			grid.attach(
@@ -287,6 +291,21 @@ class Editor(Gtk.ApplicationWindow):
 	def _on_focus_out_event(self, _text_view, event):
 		self.__menu_stack.props.visible_child = self.__status_area
 		return False
+
+	def _on_mark_set(self, _buffer, location, mark):
+		if mark.props.name == 'insert':
+			self._on_cursor_position_changed(location)
+
+	def _on_buffer_changed(self, buffer):
+		location = buffer.get_iter_at_mark(buffer.get_insert())
+		self._on_cursor_position_changed(location)
+		
+	def _on_cursor_position_changed(self, location):
+		line = location.get_line() + 1
+		column = location.get_line_offset() + 1
+		self.__status_area.set_text(
+			_('Line {line}, column {column}').format(
+				line=line, column=column))
 
 	def _on_new(self, _button):
 		if self.props.application is not None:

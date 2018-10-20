@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+import weakref
+
 import gi
 gi.require_version('Gdk', '3.0')
 gi.require_version('Gtk', '3.0')
@@ -160,9 +162,12 @@ class Editor(Gtk.ApplicationWindow):
 	__ROW_TEXT_VIEW = 0
 	__ROW_MENU = 1
 
-	def __init__(self, file=None, **props):
+	def __init__(self, application, file=None, **props):
 		super().__init__(**dict(
 			default_width=640, default_height=480, **props))
+		# The application should not disappear as long as the window
+		# is alive.
+		self.__application = weakref.proxy(application)
 
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
@@ -181,6 +186,7 @@ class Editor(Gtk.ApplicationWindow):
 		self.__menu_stack.add(self.__right_menu)
 		self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
 		self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
+		self.__right_menu.bind_key(_('Open'), self._on_open, 0, 3)
 		self.__right_menu.bind_key(
 			_('Find'), lambda b: print('“Find” activated'), 1, 1)
 
@@ -316,6 +322,17 @@ class Editor(Gtk.ApplicationWindow):
 		if self.props.application is not None:
 			self.props.application.remove_window(self)
 
+	def _on_open(self, _button):
+		# XXX Binding bug?  Should ‘new’ be the default constructor?
+		chooser = Gtk.FileChooserNative.new(
+			_('Open File'), self, Gtk.FileChooserAction.OPEN,
+			None, None)
+		response = chooser.run()
+		if response == Gtk.ResponseType.ACCEPT:
+			filename = chooser.get_filename()
+			file = Gio.File.new_for_path(filename)
+			self.__application.open([file], '')
+
 	def _on_cut(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
 		self.buffer.cut_clipboard(clip, True)
@@ -357,12 +374,12 @@ class Application(Gtk.Application):
 
 	def do_open(self, files, _n_files, _hint):
 		for file in files:
-			editor = Editor(file)
+			editor = Editor(self, file)
 			self.add_window(editor)
 			editor.show()
 
 	def do_activate(self):
-		editor = Editor()
+		editor = Editor(self)
 		self.add_window(editor)
 		editor.show()
 

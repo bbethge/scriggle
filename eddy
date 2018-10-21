@@ -167,7 +167,7 @@ class Editor(Gtk.ApplicationWindow):
 			default_width=640, default_height=480, **props))
 		# The application should not disappear as long as the window
 		# is alive.
-		self.__application = weakref.proxy(application)
+		self._application = weakref.proxy(application)
 
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
@@ -189,6 +189,7 @@ class Editor(Gtk.ApplicationWindow):
 		self.__right_menu.bind_key(_('Open'), self._on_open, 0, 3)
 		self.__right_menu.bind_key(
 			_('Find'), lambda b: print('“Find” activated'), 1, 1)
+		self.__right_menu.bind_key(_('Save'), self._on_save, 1, 2)
 
 		self.__left_menu = LMenu()
 		self.__left_menu.show_all()
@@ -323,15 +324,11 @@ class Editor(Gtk.ApplicationWindow):
 			self.props.application.remove_window(self)
 
 	def _on_open(self, _button):
-		# XXX Binding bug?  Should ‘new’ be the default constructor?
-		chooser = Gtk.FileChooserNative.new(
-			_('Open File'), self, Gtk.FileChooserAction.OPEN,
-			None, None)
-		response = chooser.run()
-		if response == Gtk.ResponseType.ACCEPT:
-			filename = chooser.get_filename()
-			file = Gio.File.new_for_path(filename)
-			self.__application.open([file], '')
+		self._application.show_open_dialog(self)
+
+	def _on_save(self, _button):
+		# TODO
+		pass
 
 	def _on_cut(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
@@ -382,6 +379,18 @@ class Application(Gtk.Application):
 		editor = Editor(self)
 		self.add_window(editor)
 		editor.show()
+
+	def show_open_dialog(self, window):
+		# XXX Binding bug?  Should ‘new’ be the default constructor?
+		chooser = Gtk.FileChooserNative.new(
+			_('Open File'), window, Gtk.FileChooserAction.OPEN,
+			None, None)
+		response = chooser.run()
+		if response == Gtk.ResponseType.ACCEPT:
+			filename = chooser.get_filename()
+			file = Gio.File.new_for_path(filename)
+			self.open([file], '')
+
 
 
 if __name__ == '__main__':

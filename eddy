@@ -165,9 +165,12 @@ class Editor(Gtk.ApplicationWindow):
 	def __init__(self, application, file=None, **props):
 		super().__init__(**dict(
 			default_width=640, default_height=480, **props))
-		# The application should not disappear as long as the window
+		# We avoid a reference cycle with this weakref.  The
+		# application should not disappear as long as the window
 		# is alive.
 		self._application = weakref.proxy(application)
+		self._etag = None
+		self._file = file
 
 		grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
 		self.add(grid)
@@ -177,9 +180,26 @@ class Editor(Gtk.ApplicationWindow):
 			Gtk.StackTransitionType.OVER_UP_DOWN)
 		grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
-		self.__status_area = Gtk.Label()
-		self.__status_area.show_all()
+		self.__status_area = Gtk.Grid(
+			orientation=Gtk.Orientation.HORIZONTAL)
 		self.__menu_stack.add(self.__status_area)
+
+		self.__save_status = Gtk.Grid(
+			orientation=Gtk.Orientation.HORIZONTAL,
+			no_show_all=True)
+		self.__status_area.add(self.__save_status)
+		save_label = Gtk.Label(_('Saving…'))
+		save_label.show()
+		self.__save_status.add(save_label)
+		self.__save_cancel_button = Gtk.Button.new_with_label(
+			_('Cancel'))
+		self.__save_cancel_button.show()
+		self.__save_status.add(self.__save_cancel_button)
+
+		self.__cursor_position_label = Gtk.Label()
+		self.__status_area.add(self.__cursor_position_label)
+
+		self.__status_area.show_all()
 
 		self.__right_menu = RMenu()
 		self.__right_menu.show_all()
@@ -233,7 +253,7 @@ class Editor(Gtk.ApplicationWindow):
 			hgrid.show_all()
 
 			def callback(file, result, _data=None):
-				status, contents, _etag = (
+				status, contents, self._etag = (
 					file.load_contents_finish(result))
 				grid.remove(hgrid)
 				if status:
@@ -310,7 +330,7 @@ class Editor(Gtk.ApplicationWindow):
 	def _on_cursor_position_changed(self, location):
 		line = location.get_line() + 1
 		column = location.get_line_offset() + 1
-		self.__status_area.set_text(
+		self.__cursor_position_label.set_text(
 			_('Line {line}, column {column}').format(
 				line=line, column=column))
 
@@ -327,8 +347,50 @@ class Editor(Gtk.ApplicationWindow):
 		self._application.show_open_dialog(self)
 
 	def _on_save(self, _button):
-		# TODO
-		pass
+		if self._file is None:
+			chooser = Gtk.FileChooserNative.new(
+				_('Save As…'), self,
+				Gtk.FileChooserAction.SAVE, None, None)
+			response = chooser.run()
+			if response != Gtk.ResponseType.ACCEPT:
+				return
+			filename = chooser.get_filename()
+			self._file = Gio.File.new_for_path(filename)
+		assert self._file is not None
+		assert self._file.get_path() is not None
+		cancellable = Gio.Cancellable()
+		cancel_handler = self.__save_cancel_button.connect(
+			'clicked', lambda b: cancellable.cancel())
+		self.__save_status.show()
+		contents = self.buffer.props.text.encode(errors='replace')
+		self._file.replace_contents_async(
+			contents=contents, etag=self._etag, make_backup=False,
+			flags=Gio.FileCreateFlags.NONE,
+			cancellable=cancellable,
+			callback = lambda f, r, d=None:
+				self.__save_file_callback(
+					f, r, d, cancel_handler))
+
+	def __save_file_callback(self, file, result, _data, cancel_handler):
+		try:
+			_status, self._etag = (
+				file.replace_contents_finish(result))
+		except GLib.Error as err:
+			message = _(
+				'Unable to save file “{filename}”: '
+				'{message}') .format(
+					filename=file.get_path(),
+					message=err.message)
+			dialog = Gtk.MessageDialog(
+				self, Gtk.DialogFlags.DESTROY_WITH_PARENT,
+				Gtk.MessageType.ERROR,
+				# XXX: Is ‘Close’ confusing (it
+				# will not close the file)?
+				Gtk.ButtonsType.CLOSE, message)
+			dialog.run()
+			dialog.destroy()
+		self.__save_cancel_button.disconnect(cancel_handler)
+		self.__save_status.hide()
 
 	def _on_cut(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)

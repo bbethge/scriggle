@@ -205,13 +205,9 @@ class Editor(Gtk.ApplicationWindow):
 	__ROW_TEXT_VIEW = 0
 	__ROW_MENU = 1
 
-	def __init__(self, application, file=None, **props):
+	def __init__(self, file=None, **props):
 		super().__init__(**dict(
 			default_width=640, default_height=480, **props))
-		# We avoid a reference cycle with this weakref.  The
-		# application should not disappear as long as the window
-		# is alive.
-		self._application = weakref.proxy(application)
 		self._etag = None
 		self._file = file
 
@@ -316,6 +312,13 @@ class Editor(Gtk.ApplicationWindow):
 	def status_area(self):
 		return self.__status_area
 
+	@property
+	def filename(self):
+		if self._file is None:
+			return None
+		else:
+			return self._file.get_path()
+
 	def _on_key_event(self, _text_view, event):
 		if (event.keyval == Gdk.KEY_Control_L
 				and self.__menu_stack.props.visible_child
@@ -371,7 +374,7 @@ class Editor(Gtk.ApplicationWindow):
 			self.props.application.remove_window(self)
 
 	def _on_open(self, _button):
-		self._application.show_open_dialog(self)
+		self.props.application.show_open_dialog(self)
 
 	def _on_save(self, _button):
 		if self._file is None:
@@ -457,22 +460,75 @@ class Editor(Gtk.ApplicationWindow):
 			False)
 
 
+def home_substitute(filename):
+	home = GLib.get_home_dir()
+	if not home:
+		return filename
+	if filename.startswith(home):
+		return '~' + filename[len(home):]
+	else:
+		return filename
+
+
 class Application(Gtk.Application):
 	def __init__(self):
 		super().__init__(
 			application_id='com.example.Eddy',
 			flags=Gio.ApplicationFlags.HANDLES_OPEN)
+		self.__unnamed_window_number = 1
 
 	def do_open(self, files, _n_files, _hint):
 		for file in files:
-			editor = Editor(self, file)
+			editor = Editor(file)
 			self.add_window(editor)
 			editor.show()
 
 	def do_activate(self):
-		editor = Editor(self)
+		editor = Editor()
 		self.add_window(editor)
 		editor.show()
+
+	def do_window_added(self, window):
+		Gtk.Application.do_window_added(self, window)
+		windows = self.get_windows()
+		if window.filename is None:
+			window.props.title = _('New File {:d}').format(
+				self.__unnamed_window_number)
+			self.__unnamed_window_number += 1
+		else:
+			basenames = self.__get_basenames(window)
+			basename = GLib.path_get_basename(window.filename)
+			if basename in basenames:
+				for w in windows:
+					self.__maybe_set_window_title(
+						w, basename)
+			else:
+				window.props.title = basename
+
+	@staticmethod
+	def __maybe_set_window_title(window, basename):
+		if (GLib.path_get_basename(window.filename) == basename):
+			window.props.title = home_substitute(window.filename)
+
+	def __get_basenames(self, window):
+		'''
+			Get the basenames of the filenames of all
+			windows that have filenames, except ‘window’.
+		'''
+		return {
+			GLib.path_get_basename(w.filename)
+			for w in self.get_windows()
+			if w is not window and w.filename is not None}
+
+	def do_window_removed(self, window):
+		Gtk.Application.do_window_removed(self, window)
+		basename = GLib.path_get_basename(window.filename)
+		other_windows = [
+			w for w in self.get_windows()
+			if w.filename is not None and w is not window
+			and GLib.path_get_basename(w.filename) == basename]
+		if len(other_windows) == 1:
+			other_windows[0].props.title = basename
 
 	def show_open_dialog(self, window):
 		# XXX Binding bug?  Should ‘new’ be the default constructor?

@@ -6,7 +6,7 @@ import gi
 gi.require_version('Gdk', '3.0')
 gi.require_version('Gtk', '3.0')
 gtk_minor_version = 14
-from gi.repository import GLib, Gio, Gdk, Gtk
+from gi.repository import GLib, GObject, Gio, Gdk, Gtk
 
 
 def _(x):
@@ -158,6 +158,49 @@ class RMenu(Menu):
 		self.attach(spacer, -4, 0, 4, 1)
 
 
+class StatusArea(Gtk.Grid):
+	def __init__(self, **props):
+		super().__init__(**dict(
+			orientation=Gtk.Orientation.HORIZONTAL, **props))
+		self.__save_status = Gtk.Grid(
+			orientation=Gtk.Orientation.HORIZONTAL,
+			no_show_all=True)
+		self.add(self.__save_status)
+	
+		save_label = Gtk.Label(_('Saving…'))
+		save_label.show()
+		self.__save_status.add(save_label)
+
+		save_cancel_button = Gtk.Button.new_with_label(_('Cancel'))
+		save_cancel_button.connect(
+			'clicked', lambda b: self.emit('save-cancel-clicked'))
+		save_cancel_button.show()
+		self.__save_status.add(save_cancel_button)
+
+		self.__cursor_position_label = Gtk.Label(
+			hexpand=True, halign=Gtk.Align.END)
+		self.add(self.__cursor_position_label)
+
+	def show_save_status(self):
+		self.__save_status.show()
+
+	def hide_save_status(self):
+		self.__save_status.hide()
+
+	@GObject.Signal
+	def save_cancel_clicked(self):
+		pass
+
+	def set_cursor_position(self, line, column):
+		'''
+			Set the (zero-based) line and column number for cursor
+			position display.
+		'''
+		self.__cursor_position_label.set_text(
+			_('Line {line}, column {column}').format(
+				line=line+1, column=column+1))
+
+
 class Editor(Gtk.ApplicationWindow):
 	__ROW_TEXT_VIEW = 0
 	__ROW_MENU = 1
@@ -180,25 +223,8 @@ class Editor(Gtk.ApplicationWindow):
 			Gtk.StackTransitionType.OVER_UP_DOWN)
 		grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
-		self.__status_area = Gtk.Grid(
-			orientation=Gtk.Orientation.HORIZONTAL)
+		self.__status_area = StatusArea()
 		self.__menu_stack.add(self.__status_area)
-
-		self.__save_status = Gtk.Grid(
-			orientation=Gtk.Orientation.HORIZONTAL,
-			no_show_all=True)
-		self.__status_area.add(self.__save_status)
-		save_label = Gtk.Label(_('Saving…'))
-		save_label.show()
-		self.__save_status.add(save_label)
-		self.__save_cancel_button = Gtk.Button.new_with_label(
-			_('Cancel'))
-		self.__save_cancel_button.show()
-		self.__save_status.add(self.__save_cancel_button)
-
-		self.__cursor_position_label = Gtk.Label()
-		self.__status_area.add(self.__cursor_position_label)
-
 		self.__status_area.show_all()
 
 		self.__right_menu = RMenu()
@@ -235,10 +261,9 @@ class Editor(Gtk.ApplicationWindow):
 			'key-release-event', self._on_key_event)
 		self.__text_view.connect(
 			'focus-out-event', self._on_focus_out_event)
-		tv_buffer = self.__text_view.get_buffer()
-		tv_buffer.connect('mark-set', self._on_mark_set)
-		tv_buffer.connect('changed', self._on_buffer_changed)
-		self._on_cursor_position_changed(tv_buffer.get_start_iter())
+		self.buffer.connect('mark-set', self._on_mark_set)
+		self.buffer.connect('changed', self._on_buffer_changed)
+		self._on_cursor_position_changed(self.buffer.get_start_iter())
 
 		if file is None:
 			grid.attach(
@@ -257,16 +282,17 @@ class Editor(Gtk.ApplicationWindow):
 					file.load_contents_finish(result))
 				grid.remove(hgrid)
 				if status:
-					buffer = Gtk.TextBuffer()
-					buffer.set_text(str(contents, 'utf-8', 'replace'))
-					self.__text_view.props.buffer = buffer
+					self.buffer.set_text(
+						str(
+							contents, 'utf-8',
+							'replace'))
 					tv_scroller.show_all()
 					grid.attach(
 						tv_scroller, 0,
 						self.__ROW_TEXT_VIEW, 1, 1)
 					self.__text_view.grab_focus()
-					buffer = self.__text_view.get_buffer()
-					buffer.place_cursor(buffer.get_start_iter())
+					self.buffer.place_cursor(
+						self.buffer.get_start_iter())
 				else:
 					label.props.label = _('Error!')
 					grid.attach(
@@ -286,6 +312,10 @@ class Editor(Gtk.ApplicationWindow):
 	def buffer(self, buffer):
 		self.text_view.props.buffer = buffer
 
+	@property
+	def status_area(self):
+		return self.__status_area
+
 	def _on_key_event(self, _text_view, event):
 		if (event.keyval == Gdk.KEY_Control_L
 				and self.__menu_stack.props.visible_child
@@ -295,7 +325,7 @@ class Editor(Gtk.ApplicationWindow):
 					self.__right_menu)
 			else:
 				self.__menu_stack.props.visible_child = (
-					self.__status_area)
+					self.status_area)
 			return True
 		if (event.keyval == Gdk.KEY_Control_R
 				and self.__menu_stack.props.visible_child
@@ -305,10 +335,10 @@ class Editor(Gtk.ApplicationWindow):
 					self.__left_menu)
 			else:
 				self.__menu_stack.props.visible_child = (
-					self.__status_area)
+					self.status_area)
 			return True
 		if (self.__menu_stack.props.visible_child
-				is not self.__status_area
+				is not self.status_area
 				and event.type == Gdk.EventType.KEY_PRESS):
 			menu = self.__menu_stack.props.visible_child
 			menu.key_press(event.keyval)
@@ -316,7 +346,7 @@ class Editor(Gtk.ApplicationWindow):
 		return False
 
 	def _on_focus_out_event(self, _text_view, event):
-		self.__menu_stack.props.visible_child = self.__status_area
+		self.__menu_stack.props.visible_child = self.status_area
 		return False
 
 	def _on_mark_set(self, _buffer, location, mark):
@@ -328,11 +358,8 @@ class Editor(Gtk.ApplicationWindow):
 		self._on_cursor_position_changed(location)
 		
 	def _on_cursor_position_changed(self, location):
-		line = location.get_line() + 1
-		column = location.get_line_offset() + 1
-		self.__cursor_position_label.set_text(
-			_('Line {line}, column {column}').format(
-				line=line, column=column))
+		self.status_area.set_cursor_position(
+			location.get_line(), location.get_line_offset())
 
 	def _on_new(self, _button):
 		if self.props.application is not None:
@@ -359,9 +386,9 @@ class Editor(Gtk.ApplicationWindow):
 		assert self._file is not None
 		assert self._file.get_path() is not None
 		cancellable = Gio.Cancellable()
-		cancel_handler = self.__save_cancel_button.connect(
-			'clicked', lambda b: cancellable.cancel())
-		self.__save_status.show()
+		cancel_handler = self.status_area.connect(
+			'save-cancel-clicked', lambda b: cancellable.cancel())
+		self.status_area.show_save_status()
 		contents = self.buffer.props.text.encode(errors='replace')
 		self._file.replace_contents_async(
 			contents=contents, etag=self._etag, make_backup=False,
@@ -389,8 +416,8 @@ class Editor(Gtk.ApplicationWindow):
 				Gtk.ButtonsType.CLOSE, message)
 			dialog.run()
 			dialog.destroy()
-		self.__save_cancel_button.disconnect(cancel_handler)
-		self.__save_status.hide()
+		self.status_area.disconnect(cancel_handler)
+		self.status_area.hide_save_status()
 
 	def _on_cut(self, _button):
 		clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)

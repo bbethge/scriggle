@@ -394,11 +394,16 @@ class Editor(Gtk.ApplicationWindow):
 			contents=contents, etag=self._etag, make_backup=False,
 			flags=Gio.FileCreateFlags.NONE,
 			cancellable=cancellable,
-			callback = lambda f, r, d=None:
+			callback = lambda file, result, _data=None:
 				self.__save_file_callback(
-					f, r, d, cancel_handler))
+					file, result, cancel_handler,
+					# ‘contents’ is an argument to the
+					# callback only to keep it alive until
+					# the callback finishes.
+					contents))
 
-	def __save_file_callback(self, file, result, _data, cancel_handler):
+	def __save_file_callback(
+			self, file, result, cancel_handler, _contents):
 		try:
 			_status, self._etag = (
 				file.replace_contents_finish(result))

@@ -200,6 +200,8 @@ class Editor(Gtk.ApplicationWindow):
                          **props))
         self._etag = None
         self._file = file
+        self._saved = False
+        self._close_after_save = False
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
@@ -334,6 +336,7 @@ class Editor(Gtk.ApplicationWindow):
     def _on_buffer_changed(self, buffer):
         location = buffer.get_iter_at_mark(buffer.get_insert())
         self._on_cursor_position_changed(location)
+        self._saved = False
 
     def _on_cursor_position_changed(self, location):
         self.status_area.set_cursor_position(
@@ -343,15 +346,43 @@ class Editor(Gtk.ApplicationWindow):
         if self.props.application is not None:
             self.props.application.activate()
 
-    def _on_close(self, _button):
-        self.hide()
+    def do_delete_event(self, _event):
+        self._on_close()
+        return True
+
+    def _on_close(self, _button=None):
+        if not self._saved and self.buffer.get_char_count() > 0:
+            DISCARD = 0
+            SAVE = 1
+            dialog = Gtk.MessageDialog(self,
+                                       Gtk.DialogFlags.MODAL,
+                                       Gtk.MessageType.QUESTION,
+                                       Gtk.ButtonsType.NONE,
+                                       _('Save changes to {} before closing?')
+                                           .format(self.props.title))
+            dialog.add_buttons(_('Close without Saving'), DISCARD,
+                               _('Cancel'), Gtk.ResponseType.CANCEL,
+                               _('Save'), SAVE)
+            response = dialog.run()
+            dialog.destroy()
+            if response in [Gtk.ResponseType.CANCEL, 
+                            Gtk.ResponseType.DELETE_EVENT]:
+                return
+            elif response == SAVE:
+                self._close_after_save = True
+                self._on_save()
+                return
+        self._finish_close()
+
+    def _finish_close(self):
         if self.props.application is not None:
             self.props.application.remove_window(self)
+        self.destroy()
 
     def _on_open(self, _button):
         self.props.application.show_open_dialog(self)
 
-    def _on_save(self, _button):
+    def _on_save(self, _button=None):
         if self._file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
@@ -394,6 +425,10 @@ class Editor(Gtk.ApplicationWindow):
             dialog.destroy()
         self.status_area.disconnect(cancel_handler)
         self.status_area.hide_save_status()
+        self._saved = True
+        if self._close_after_save:
+            self._finish_close()
+            self._close_after_save = False
 
     def _on_cut(self, _button):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)

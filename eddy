@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 
+import gettext
+from gettext import gettext as _
 import weakref
 
 import gi
@@ -7,10 +9,6 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('Gtk', '3.0')
 gtk_minor_version = 14
 from gi.repository import GLib, GObject, Gio, Gdk, Gtk
-
-
-def _(x):
-    return x
 
 
 class MenuItem(Gtk.Button):
@@ -504,7 +502,14 @@ class Application(Gtk.Application):
 
 
 if __name__ == '__main__':
+    from os.path import abspath, dirname, isdir, join
     import sys
+    # This is the locale directory if we are not installed.
+    localedir = abspath(join(dirname(sys.argv[0]), 'locale'))
+    if not isdir(localedir):
+        localedir = None
+    gettext.bindtextdomain('eddy', localedir)
+    gettext.textdomain('eddy')
     if Gtk.get_minor_version() < gtk_minor_version:
         dialog = Gtk.MessageDialog(
             None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,

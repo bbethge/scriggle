@@ -235,6 +235,8 @@ class Editor(Gtk.ApplicationWindow):
         self.__left_menu.bind_key('←', self._on_left, 1, 1)
         self.__left_menu.bind_key('↓', self._on_down, 1, 2)
         self.__left_menu.bind_key('→', self._on_right, 1, 3)
+        self.__left_menu.bind_key('← Word', self._on_left_word, 0, 1)
+        self.__left_menu.bind_key('→ Word', self._on_right_word, 0, 3)
 
         tv_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN, 
                                          expand=True)
@@ -420,6 +422,14 @@ class Editor(Gtk.ApplicationWindow):
     def _on_right(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.VISUAL_POSITIONS, 1, False)
+
+    def _on_left_word(self, _button):
+        self.__text_view.emit('move-cursor',
+                              Gtk.MovementStep.WORDS, -1, False)
+
+    def _on_right_word(self, _button):
+        self.__text_view.emit('move-cursor',
+                              Gtk.MovementStep.WORDS, 1, False)
 
 
 def home_substitute(filename):

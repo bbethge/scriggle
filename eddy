@@ -480,6 +480,8 @@ class Application(Gtk.Application):
 
     def do_window_removed(self, window):
         Gtk.Application.do_window_removed(self, window)
+        if window.filename is None:
+            return
         basename = GLib.path_get_basename(window.filename)
         other_windows = [
             w for w in self.get_windows()

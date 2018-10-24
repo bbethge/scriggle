@@ -2,6 +2,7 @@
 
 import gettext
 from gettext import gettext as _
+import os
 import weakref
 
 import gi
@@ -83,7 +84,7 @@ class Menu(Gtk.Grid):
         self.__items[keyval] = item
 
     def __get_item(self, row, column):
-        return self.get_child_at(self.__key_coörds_to_grid_col(row, column), 
+        return self.get_child_at(self.__key_coörds_to_grid_col(row, column),
                                  row)
 
     def bind_key(self, label, callback, row, column):
@@ -108,7 +109,7 @@ class Menu(Gtk.Grid):
     @staticmethod
     def __key_coörds_to_grid_col(row, column):
         '''
-            Given the coördinates of a key, return the leftmost column 
+            Given the coördinates of a key, return the leftmost column
             its button occupies in the grid.
         '''
         return 4*column + row**2 - row//2
@@ -151,7 +152,7 @@ class RMenu(Menu):
 
 class StatusArea(Gtk.Grid):
     def __init__(self, **props):
-        super().__init__(**dict(orientation=Gtk.Orientation.HORIZONTAL, 
+        super().__init__(**dict(orientation=Gtk.Orientation.HORIZONTAL,
                                 **props))
         self.__save_status = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL,
                                       no_show_all=True)
@@ -167,7 +168,7 @@ class StatusArea(Gtk.Grid):
         save_cancel_button.show()
         self.__save_status.add(save_cancel_button)
 
-        self.__cursor_position_label = Gtk.Label(hexpand=True, 
+        self.__cursor_position_label = Gtk.Label(hexpand=True,
                                                  halign=Gtk.Align.END)
         self.add(self.__cursor_position_label)
 
@@ -200,7 +201,7 @@ class Editor(Gtk.ApplicationWindow):
                          **props))
         self._etag = None
         self._file = file
-        self._saved = False
+        self._saved = True
         self._close_after_save = False
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
@@ -240,7 +241,7 @@ class Editor(Gtk.ApplicationWindow):
         self.__left_menu.bind_key('← Word', self._on_left_word, 0, 1)
         self.__left_menu.bind_key('→ Word', self._on_right_word, 0, 3)
 
-        tv_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN, 
+        tv_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN,
                                          expand=True)
 
         self.__text_view = Gtk.TextView(expand=True)
@@ -249,11 +250,11 @@ class Editor(Gtk.ApplicationWindow):
         self.__text_view.connect('key-release-event', self._on_key_event)
         self.__text_view.connect('focus-out-event', self._on_focus_out_event)
         self.buffer.connect('mark-set', self._on_mark_set)
-        self.buffer.connect('changed', self._on_buffer_changed)
         self._on_cursor_position_changed(self.buffer.get_start_iter())
 
         if file is None:
             grid.attach(tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
+            self.buffer.connect('changed', self._on_buffer_changed)
         else:
             hgrid= Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
             label = Gtk.Label(_('Loading…'))
@@ -268,11 +269,15 @@ class Editor(Gtk.ApplicationWindow):
                     file.load_contents_finish(result))
                 grid.remove(hgrid)
                 if status:
+                    # Gtk.TextBuffer wants the text without the last newline
+                    if contents.endswith(b'\n'):
+                        contents = contents[:-1]
                     self.buffer.set_text(str(contents, 'utf-8', 'replace'))
                     tv_scroller.show_all()
                     grid.attach(tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
                     self.__text_view.grab_focus()
                     self.buffer.place_cursor(self.buffer.get_start_iter())
+                    self.buffer.connect('changed', self._on_buffer_changed)
                 else:
                     label.props.label = _('Error!')
                     grid.attach(label, 0, self.__ROW_TEXT_VIEW, 1, 1)
@@ -286,9 +291,6 @@ class Editor(Gtk.ApplicationWindow):
     @property
     def buffer(self):
         return self.__text_view.props.buffer
-    @buffer.setter
-    def buffer(self, buffer):
-        self.text_view.props.buffer = buffer
 
     @property
     def status_area(self):
@@ -351,7 +353,7 @@ class Editor(Gtk.ApplicationWindow):
         return True
 
     def _on_close(self, _button=None):
-        if not self._saved and self.buffer.get_char_count() > 0:
+        if not self._saved:
             DISCARD = 0
             SAVE = 1
             dialog = Gtk.MessageDialog(self,
@@ -363,9 +365,10 @@ class Editor(Gtk.ApplicationWindow):
             dialog.add_buttons(_('Close without Saving'), DISCARD,
                                _('Cancel'), Gtk.ResponseType.CANCEL,
                                _('Save'), SAVE)
+            dialog.set_default_response(SAVE)
             response = dialog.run()
             dialog.destroy()
-            if response in [Gtk.ResponseType.CANCEL, 
+            if response in [Gtk.ResponseType.CANCEL,
                             Gtk.ResponseType.DELETE_EVENT]:
                 return
             elif response == SAVE:
@@ -399,36 +402,76 @@ class Editor(Gtk.ApplicationWindow):
         self.status_area.show_save_status()
         contents = self.buffer.props.text.encode(errors='replace')
         self._file.replace_contents_async(
-            contents=contents, etag=self._etag, make_backup=False,
-            flags=Gio.FileCreateFlags.NONE, cancellable=cancellable,
-            callback = lambda file, result, _data=None:
-                           self.__save_file_callback(
-                               file, result, cancel_handler,
-                               # ‘contents’ is an argument to the
-                               # callback only to keep it alive until
-                               # the callback finishes.
-                               contents))
+            contents, self._etag, False, Gio.FileCreateFlags.NONE, cancellable,
+            lambda file, result, _data=None:
+                self._replace_file_callback(
+                    file, result, cancellable, cancel_handler,
+                    # We pass “contents” to self._replace_file_callback
+                    # only to keep it alive until writing is finished.
+                    contents))
 
-    def __save_file_callback(self, file, result, cancel_handler, _contents):
+    def _replace_file_callback(self, file, result, cancellable, cancel_handler,
+                               _contents):
         try:
             _status, self._etag = file.replace_contents_finish(result)
-        except GLib.Error as err:
-            message = (_('Unable to save file “{filename}”: {message}')
-                       .format(filename=file.get_path(), message=err.message))
-            dialog = Gtk.MessageDialog(self, 
-                                       Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                       Gtk.MessageType.ERROR,
-                                       # XXX: Is ‘Close’ confusing (it
-                                       # will not close the file)?
-                                       Gtk.ButtonsType.CLOSE, message)
-            dialog.run()
-            dialog.destroy()
-        self.status_area.disconnect(cancel_handler)
-        self.status_area.hide_save_status()
+        except GLib.Error as error:
+            self._error_on_save(file.get_path(), error)
+            return
+        file.append_to_async(
+            Gio.FileCreateFlags.NONE, GLib.PRIORITY_DEFAULT, cancellable,
+            lambda file, result, _data=None:
+                self._append_to_file_callback(file, result, cancellable,
+                                              cancel_handler))
+
+    def _append_to_file_callback(self, file, result, cancellable,
+                                 cancel_handler):
+        try:
+            stream = file.append_to_finish(result)
+        except GLib.Error as error:
+            self._error_on_save(file.get_path(), error)
+            return
+        newline = b'\n'
+        stream.write_async(
+            newline, GLib.PRIORITY_DEFAULT, cancellable,
+            lambda stream, result, _data=None:
+                self._write_newline_callback(
+                    stream, result, file.get_path(), cancel_handler,
+                    # We pass “newline” to self._append_to_file_finish
+                    # only to keep it alive until writing is finished.
+                    newline))
+
+    def _write_newline_callback(self, stream, result, filename, cancel_handler,
+                                _newline):
+        try:
+            stream.write_finish(result)
+            stream.close()
+        except GLib.Error as error:
+            self._error_on_save(filename, error)
+            return
+        self._save_terminated(cancel_handler)
         self._saved = True
         if self._close_after_save:
             self._finish_close()
             self._close_after_save = False
+
+    def _error_on_save(self, filename, error):
+        '''Called when there is an error while saving'''
+        message = (_('Unable to save file “{filename}”: {message}')
+                   .format(filename=filename, message=error.message))
+        dialog = Gtk.MessageDialog(self,
+                                   Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                                   Gtk.MessageType.ERROR,
+                                   # XXX: Is ‘Close’ confusing (it
+                                   # will not close the file)?
+                                   Gtk.ButtonsType.CLOSE, message)
+        dialog.run()
+        dialog.destroy()
+        self._save_terminated(cancel_handler)
+
+    def _save_terminated(self, cancel_handler):
+        '''Called when a save is finished or aborted due to error'''
+        self.status_area.disconnect(cancel_handler)
+        self.status_area.hide_save_status()
 
     def _on_cut(self, _button):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
@@ -517,7 +560,7 @@ class Application(Gtk.Application):
 
     def __get_basenames(self, window):
         '''
-            Get the basenames of the filenames of all windows that have 
+            Get the basenames of the filenames of all windows that have
             filenames, except ‘window’.
         '''
         return {GLib.path_get_basename(w.filename) for w in self.get_windows()
@@ -537,7 +580,7 @@ class Application(Gtk.Application):
 
     def show_open_dialog(self, window):
         # XXX Binding bug?  Should ‘new’ be the default constructor?
-        chooser = Gtk.FileChooserNative.new(_('Open File'), window, 
+        chooser = Gtk.FileChooserNative.new(_('Open File'), window,
                                             Gtk.FileChooserAction.OPEN,
                                             None, None)
         response = chooser.run()

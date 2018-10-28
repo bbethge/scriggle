@@ -191,6 +191,22 @@ class StatusArea(Gtk.Grid):
             _('Line {line}, column {column}')
             .format(line=line+1, column=column+1))
 
+    def pop_out_cursor_position_label(self):
+        '''
+            Remove the cursor position label from ‘self’ and return it
+            so it can be added to another widget.  You should still
+            call self.set_cursor_position to update the label.
+        '''
+        self.remove(self.__cursor_position_label)
+        return self.__cursor_position_label
+
+    def pop_in_cursor_position_label(self):
+        '''
+            Add the cursor position label back to ‘self’.  You should
+            remove it from any other container before calling this.
+        '''
+        self.add(self.__cursor_position_label)
+
 
 class Editor(Gtk.ApplicationWindow):
     __ROW_TEXT_VIEW = 0
@@ -207,10 +223,15 @@ class Editor(Gtk.ApplicationWindow):
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
 
+        self.__menu_overlay = Gtk.Overlay()
+        grid.attach(self.__menu_overlay, 0, self.__ROW_MENU, 1, 1)
+        
         self.__menu_stack = Gtk.Stack()
         self.__menu_stack.props.transition_type = (
             Gtk.StackTransitionType.OVER_UP_DOWN)
-        grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
+        self.__menu_overlay.add(self.__menu_stack)
+
+        self.__position_label = None
 
         self.__status_area = StatusArea()
         self.__menu_stack.add(self.__status_area)
@@ -317,7 +338,18 @@ class Editor(Gtk.ApplicationWindow):
                     is not self.__right_menu):
             if event.type == Gdk.EventType.KEY_PRESS:
                 self.__menu_stack.props.visible_child = self.__left_menu
+                self.__position_label = (
+                    self.__status_area.pop_out_cursor_position_label())
+                self.__position_label.props.halign = Gtk.Align.END
+                self.__position_label.props.valign = Gtk.Align.START
+                self.__menu_overlay.add_overlay(self.__position_label)
             else:
+                # FIXME: The cursor position label is momentarily
+                # covered by the background of the menu as it slides
+                # away.
+                self.__menu_overlay.remove(self.__position_label)
+                self.status_area.pop_in_cursor_position_label()
+                self.__position_label = None
                 self.__menu_stack.props.visible_child = self.status_area
             return True
         if (self.__menu_stack.props.visible_child is not self.status_area

@@ -213,42 +213,42 @@ class MenuStack(Gtk.Overlay):
     def __init__(self, **props):
         super().__init__(**props)
 
-        self._stack = Gtk.Stack(
+        self.__stack = Gtk.Stack(
             transition_type=Gtk.StackTransitionType.OVER_UP_DOWN)
-        self.add(self._stack)
+        self.add(self.__stack)
 
-        self._status_area = StatusArea()
-        self._status_area.show_all()
-        self._stack.add(self._status_area)
+        self.__status_area = StatusArea()
+        self.__status_area.show_all()
+        self.__stack.add(self.__status_area)
 
-        self._position_label = None
+        self.__position_label = None
 
-        self._right_menu = RMenu()
-        self._right_menu.show_all()
-        self._stack.add(self._right_menu)
-        self._right_menu.bind_key(_('New'), self._emitter('new'), 0, 1)
-        self._right_menu.bind_key(_('Close'), self._emitter('close'), 0, 2)
-        self._right_menu.bind_key(_('Open'), self._emitter('open'), 0, 3)
-        self._right_menu.bind_key(_('Find'),
-                                  lambda b: print('“Find” activated'), 1, 1)
-        self._right_menu.bind_key(_('Save'), self._emitter('save'), 1, 2)
+        self.__right_menu = RMenu()
+        self.__right_menu.show_all()
+        self.__stack.add(self.__right_menu)
+        self.__right_menu.bind_key(_('New'), self.__emitter('new'), 0, 1)
+        self.__right_menu.bind_key(_('Close'), self.__emitter('close'), 0, 2)
+        self.__right_menu.bind_key(_('Open'), self.__emitter('open'), 0, 3)
+        self.__right_menu.bind_key(_('Find'),
+                                   lambda b: print('“Find” activated'), 1, 1)
+        self.__right_menu.bind_key(_('Save'), self.__emitter('save'), 1, 2)
 
-        self._left_menu = LMenu()
-        self._left_menu.show_all()
-        self._stack.add(self._left_menu)
-        self._left_menu.bind_key(_('Undo'),
-                                 lambda b: print('“Undo” activated'), 2, 0)
-        self._left_menu.bind_key(_('Cut'), self._emitter('cut'), 2, 1)
-        self._left_menu.bind_key(_('Copy'), self._emitter('copy'), 2, 2)
-        self._left_menu.bind_key(_('Paste'), self._emitter('paste'), 2, 3)
-        self._left_menu.bind_key('↑', self._emitter('up'), 0, 2)
-        self._left_menu.bind_key('←', self._emitter('left'), 1, 1)
-        self._left_menu.bind_key('↓', self._emitter('down'), 1, 2)
-        self._left_menu.bind_key('→', self._emitter('right'), 1, 3)
-        self._left_menu.bind_key('← Word', self._emitter('left-word'), 0, 1)
-        self._left_menu.bind_key('→ Word', self._emitter('right-word'), 0, 3)
+        self.__left_menu = LMenu()
+        self.__left_menu.show_all()
+        self.__stack.add(self.__left_menu)
+        self.__left_menu.bind_key(_('Undo'),
+                                  lambda b: print('“Undo” activated'), 2, 0)
+        self.__left_menu.bind_key(_('Cut'), self.__emitter('cut'), 2, 1)
+        self.__left_menu.bind_key(_('Copy'), self.__emitter('copy'), 2, 2)
+        self.__left_menu.bind_key(_('Paste'), self.__emitter('paste'), 2, 3)
+        self.__left_menu.bind_key('↑', self.__emitter('up'), 0, 2)
+        self.__left_menu.bind_key('←', self.__emitter('left'), 1, 1)
+        self.__left_menu.bind_key('↓', self.__emitter('down'), 1, 2)
+        self.__left_menu.bind_key('→', self.__emitter('right'), 1, 3)
+        self.__left_menu.bind_key('← Word', self.__emitter('left-word'), 0, 1)
+        self.__left_menu.bind_key('→ Word', self.__emitter('right-word'), 0, 3)
 
-    def _emitter(self, action):
+    def __emitter(self, action):
         '''
             Create a closure which will will emit the ‘activate’ signal
             with ‘action’ as the signal detail.
@@ -267,32 +267,32 @@ class MenuStack(Gtk.Overlay):
 
     @property
     def status_area(self):
-        return self._status_area
+        return self.__status_area
 
     def key_event(self, event):
         '''Handle a key event from the text view'''
         if (event.keyval == Gdk.KEY_Control_L
-                and self._stack.props.visible_child is not self._left_menu):
+                and self.__stack.props.visible_child is not self.__left_menu):
             if event.type == Gdk.EventType.KEY_PRESS:
-                self._stack.props.visible_child = self._right_menu
+                self.__stack.props.visible_child = self.__right_menu
             else:
-                self._stack.props.visible_child = self._status_area
+                self.__stack.props.visible_child = self.__status_area
             return True
         if (event.keyval == Gdk.KEY_Control_R
-                and self._stack.props.visible_child is not self._right_menu):
+                and self.__stack.props.visible_child is not self.__right_menu):
             if event.type == Gdk.EventType.KEY_PRESS:
-                self._stack.props.visible_child = self._left_menu
-                self._position_label = (
-                    self._status_area.pop_out_cursor_position_label())
-                self._position_label.props.halign = Gtk.Align.END
-                self._position_label.props.valign = Gtk.Align.START
-                self.add_overlay(self._position_label)
+                self.__stack.props.visible_child = self.__left_menu
+                self.__position_label = (
+                    self.__status_area.pop_out_cursor_position_label())
+                self.__position_label.props.halign = Gtk.Align.END
+                self.__position_label.props.valign = Gtk.Align.START
+                self.add_overlay(self.__position_label)
             else:
                 self.show_status_area()
             return True
-        if (self._stack.props.visible_child is not self._status_area
+        if (self.__stack.props.visible_child is not self.__status_area
                 and event.type == Gdk.EventType.KEY_PRESS):
-            menu = self._stack.props.visible_child
+            menu = self.__stack.props.visible_child
             menu.key_press(event.keyval)
             return True
         return False
@@ -301,11 +301,11 @@ class MenuStack(Gtk.Overlay):
         '''Hide any shown menu and show the status area instead'''
         # FIXME: The cursor position label is momentarily covered by
         # the background of the menu as it slides away.
-        if self._position_label is not None:
-            self.remove(self._position_label)
-            self._status_area.pop_in_cursor_position_label()
-            self._position_label = None
-        self._stack.props.visible_child = self._status_area
+        if self.__position_label is not None:
+            self.remove(self.__position_label)
+            self.__status_area.pop_in_cursor_position_label()
+            self.__position_label = None
+        self.__stack.props.visible_child = self.__status_area
 
 
 class Editor(Gtk.ApplicationWindow):
@@ -315,10 +315,10 @@ class Editor(Gtk.ApplicationWindow):
     def __init__(self, file=None, **props):
         super().__init__(**dict(default_width=640, default_height=480,
                          **props))
-        self._etag = None
-        self._file = file
-        self._saved = True
-        self._close_after_save = False
+        self.__etag = None
+        self.__file = file
+        self.__saved = True
+        self.__close_after_save = False
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
@@ -343,13 +343,13 @@ class Editor(Gtk.ApplicationWindow):
             lambda text_view, event: self.__menu_stack.key_event(event))
         self.__text_view.connect('key-release-event',
             lambda text_view, event: self.__menu_stack.key_event(event))
-        self.__text_view.connect('focus-out-event', self._on_focus_out_event)
-        self.buffer.connect('mark-set', self._on_mark_set)
-        self._on_cursor_position_changed(self.buffer.get_start_iter())
+        self.__text_view.connect('focus-out-event', self.__on_focus_out_event)
+        self.buffer.connect('mark-set', self.__on_mark_set)
+        self.__on_cursor_position_changed(self.buffer.get_start_iter())
 
         if file is None:
             grid.attach(tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
-            self.buffer.connect('changed', self._on_buffer_changed)
+            self.buffer.connect('changed', self.__on_buffer_changed)
         else:
             hgrid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
             label = Gtk.Label(_('Loading…'))
@@ -360,7 +360,7 @@ class Editor(Gtk.ApplicationWindow):
             hgrid.show_all()
 
             def callback(file, result, _data=None):
-                status, contents, self._etag = (
+                status, contents, self.__etag = (
                     file.load_contents_finish(result))
                 grid.remove(hgrid)
                 if status:
@@ -372,7 +372,7 @@ class Editor(Gtk.ApplicationWindow):
                     grid.attach(tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
                     self.__text_view.grab_focus()
                     self.buffer.place_cursor(self.buffer.get_start_iter())
-                    self.buffer.connect('changed', self._on_buffer_changed)
+                    self.buffer.connect('changed', self.__on_buffer_changed)
                 else:
                     label.props.label = _('Error!')
                     grid.attach(label, 0, self.__ROW_TEXT_VIEW, 1, 1)
@@ -389,25 +389,25 @@ class Editor(Gtk.ApplicationWindow):
 
     @property
     def filename(self):
-        if self._file is None:
+        if self.__file is None:
             return None
         else:
-            return self._file.get_path()
+            return self.__file.get_path()
 
-    def _on_focus_out_event(self, _text_view, event):
+    def __on_focus_out_event(self, _text_view, event):
         self.__menu_stack.show_status_area()
         return False
 
-    def _on_mark_set(self, _buffer, location, mark):
+    def __on_mark_set(self, _buffer, location, mark):
         if mark.props.name == 'insert':
-            self._on_cursor_position_changed(location)
+            self.__on_cursor_position_changed(location)
 
-    def _on_buffer_changed(self, buffer):
+    def __on_buffer_changed(self, buffer):
         location = buffer.get_iter_at_mark(buffer.get_insert())
-        self._on_cursor_position_changed(location)
-        self._saved = False
+        self.__on_cursor_position_changed(location)
+        self.__saved = False
 
-    def _on_cursor_position_changed(self, location):
+    def __on_cursor_position_changed(self, location):
         self.__menu_stack.status_area.set_cursor_position(
             location.get_line(), location.get_line_offset())
 
@@ -420,7 +420,7 @@ class Editor(Gtk.ApplicationWindow):
         return True
 
     def _on_menu_close(self, _button=None):
-        if not self._saved:
+        if not self.__saved:
             DISCARD = 0
             SAVE = 1
             dialog = Gtk.MessageDialog(self,
@@ -439,12 +439,12 @@ class Editor(Gtk.ApplicationWindow):
                             Gtk.ResponseType.DELETE_EVENT]:
                 return
             elif response == SAVE:
-                self._close_after_save = True
+                self.__close_after_save = True
                 self._on_save()
                 return
-        self._finish_close()
+        self.__finish_close()
 
-    def _finish_close(self):
+    def __finish_close(self):
         if self.props.application is not None:
             self.props.application.remove_window(self)
         self.destroy()
@@ -453,75 +453,75 @@ class Editor(Gtk.ApplicationWindow):
         self.props.application.show_open_dialog(self)
 
     def _on_menu_save(self, _button=None):
-        if self._file is None:
+        if self.__file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
             response = chooser.run()
             if response != Gtk.ResponseType.ACCEPT:
                 return
             filename = chooser.get_filename()
-            self._file = Gio.File.new_for_path(filename)
-        assert self._file is not None
-        assert self._file.get_path() is not None
+            self.__file = Gio.File.new_for_path(filename)
+        assert self.__file is not None
+        assert self.__file.get_path() is not None
         cancellable = Gio.Cancellable()
         cancel_handler = self.__menu_stack.status_area.connect(
             'save-cancel-clicked', lambda b: cancellable.cancel())
         self.__menu_stack.status_area.show_save_status()
         contents = self.buffer.props.text.encode(errors='replace')
-        self._file.replace_contents_async(
-            contents, self._etag, False, Gio.FileCreateFlags.NONE, cancellable,
+        self.__file.replace_contents_async(
+            contents, self.__etag, False, Gio.FileCreateFlags.NONE, cancellable,
             lambda file, result, _data=None:
-                self._replace_file_callback(
+                self.__replace_file_callback(
                     file, result, cancellable, cancel_handler,
-                    # We pass “contents” to self._replace_file_callback
+                    # We pass “contents” to self.__replace_file_callback
                     # only to keep it alive until writing is finished.
                     contents))
 
-    def _replace_file_callback(self, file, result, cancellable, cancel_handler,
-                               _contents):
+    def __replace_file_callback(self, file, result, cancellable, cancel_handler,
+                                _contents):
         try:
-            _status, self._etag = file.replace_contents_finish(result)
+            _status, self.__etag = file.replace_contents_finish(result)
         except GLib.Error as error:
-            self._error_on_save(file.get_path(), error)
+            self.__error_on_save(file.get_path(), error)
             return
         file.append_to_async(
             Gio.FileCreateFlags.NONE, GLib.PRIORITY_DEFAULT, cancellable,
             lambda file, result, _data=None:
-                self._append_to_file_callback(file, result, cancellable,
+                self.__append_to_file_callback(file, result, cancellable,
                                               cancel_handler))
 
-    def _append_to_file_callback(self, file, result, cancellable,
-                                 cancel_handler):
+    def __append_to_file_callback(self, file, result, cancellable,
+                                  cancel_handler):
         try:
             stream = file.append_to_finish(result)
         except GLib.Error as error:
-            self._error_on_save(file.get_path(), error)
+            self.__error_on_save(file.get_path(), error)
             return
         newline = b'\n'
         stream.write_async(
             newline, GLib.PRIORITY_DEFAULT, cancellable,
             lambda stream, result, _data=None:
-                self._write_newline_callback(
+                self.__write_newline_callback(
                     stream, result, file.get_path(), cancel_handler,
                     # We pass “newline” to self._append_to_file_finish
                     # only to keep it alive until writing is finished.
                     newline))
 
-    def _write_newline_callback(self, stream, result, filename, cancel_handler,
-                                _newline):
+    def __write_newline_callback(self, stream, result, filename, cancel_handler,
+                                 _newline):
         try:
             stream.write_finish(result)
             stream.close()
         except GLib.Error as error:
-            self._error_on_save(filename, error)
+            self.__error_on_save(filename, error)
             return
-        self._save_terminated(cancel_handler)
-        self._saved = True
-        if self._close_after_save:
-            self._finish_close()
-            self._close_after_save = False
+        self.__save_terminated(cancel_handler)
+        self.__saved = True
+        if self.__close_after_save:
+            self.__finish_close()
+            self.__close_after_save = False
 
-    def _error_on_save(self, filename, error):
+    def __error_on_save(self, filename, error):
         '''Called when there is an error while saving'''
         message = (_('Unable to save file “{filename}”: {message}')
                    .format(filename=filename, message=error.message))
@@ -533,9 +533,9 @@ class Editor(Gtk.ApplicationWindow):
                                    Gtk.ButtonsType.CLOSE, message)
         dialog.run()
         dialog.destroy()
-        self._save_terminated(cancel_handler)
+        self.__save_terminated(cancel_handler)
 
-    def _save_terminated(self, cancel_handler):
+    def __save_terminated(self, cancel_handler):
         '''Called when a save is finished or aborted due to error'''
         self.__menu_stack.status_area.disconnect(cancel_handler)
         self.__menu_stack.status_area.hide_save_status()

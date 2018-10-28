@@ -3,6 +3,7 @@
 import gettext
 from gettext import gettext as _
 import os
+import types
 import weakref
 
 import gi
@@ -208,6 +209,105 @@ class StatusArea(Gtk.Grid):
         self.add(self.__cursor_position_label)
 
 
+class MenuStack(Gtk.Overlay):
+    def __init__(self, **props):
+        super().__init__(**props)
+
+        self._stack = Gtk.Stack(
+            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN)
+        self.add(self._stack)
+
+        self._status_area = StatusArea()
+        self._status_area.show_all()
+        self._stack.add(self._status_area)
+
+        self._position_label = None
+
+        self._right_menu = RMenu()
+        self._right_menu.show_all()
+        self._stack.add(self._right_menu)
+        self._right_menu.bind_key(_('New'), self._emitter('new'), 0, 1)
+        self._right_menu.bind_key(_('Close'), self._emitter('close'), 0, 2)
+        self._right_menu.bind_key(_('Open'), self._emitter('open'), 0, 3)
+        self._right_menu.bind_key(_('Find'),
+                                  lambda b: print('“Find” activated'), 1, 1)
+        self._right_menu.bind_key(_('Save'), self._emitter('save'), 1, 2)
+
+        self._left_menu = LMenu()
+        self._left_menu.show_all()
+        self._stack.add(self._left_menu)
+        self._left_menu.bind_key(_('Undo'),
+                                 lambda b: print('“Undo” activated'), 2, 0)
+        self._left_menu.bind_key(_('Cut'), self._emitter('cut'), 2, 1)
+        self._left_menu.bind_key(_('Copy'), self._emitter('copy'), 2, 2)
+        self._left_menu.bind_key(_('Paste'), self._emitter('paste'), 2, 3)
+        self._left_menu.bind_key('↑', self._emitter('up'), 0, 2)
+        self._left_menu.bind_key('←', self._emitter('left'), 1, 1)
+        self._left_menu.bind_key('↓', self._emitter('down'), 1, 2)
+        self._left_menu.bind_key('→', self._emitter('right'), 1, 3)
+        self._left_menu.bind_key('← Word', self._emitter('left-word'), 0, 1)
+        self._left_menu.bind_key('→ Word', self._emitter('right-word'), 0, 3)
+
+    def _emitter(self, action):
+        '''
+            Create a closure which will will emit the ‘activate’ signal
+            with ‘action’ as the signal detail.
+        '''
+        return lambda _button: self.emit('activate::' + action)
+
+    @GObject.Signal(flags = GObject.SignalFlags.RUN_FIRST
+                          | GObject.SignalFlags.DETAILED)
+    def activate(self):
+        '''
+            Emitted when a MenuItem is activated.  The signal detail is
+            an identifier for the action to be performed, e.g., 'open'
+            or 'save-as'.
+        '''
+        pass
+
+    @property
+    def status_area(self):
+        return self._status_area
+
+    def key_event(self, event):
+        '''Handle a key event from the text view'''
+        if (event.keyval == Gdk.KEY_Control_L
+                and self._stack.props.visible_child is not self._left_menu):
+            if event.type == Gdk.EventType.KEY_PRESS:
+                self._stack.props.visible_child = self._right_menu
+            else:
+                self._stack.props.visible_child = self._status_area
+            return True
+        if (event.keyval == Gdk.KEY_Control_R
+                and self._stack.props.visible_child is not self._right_menu):
+            if event.type == Gdk.EventType.KEY_PRESS:
+                self._stack.props.visible_child = self._left_menu
+                self._position_label = (
+                    self._status_area.pop_out_cursor_position_label())
+                self._position_label.props.halign = Gtk.Align.END
+                self._position_label.props.valign = Gtk.Align.START
+                self.add_overlay(self._position_label)
+            else:
+                self.show_status_area()
+            return True
+        if (self._stack.props.visible_child is not self._status_area
+                and event.type == Gdk.EventType.KEY_PRESS):
+            menu = self._stack.props.visible_child
+            menu.key_press(event.keyval)
+            return True
+        return False
+
+    def show_status_area(self):
+        '''Hide any shown menu and show the status area instead'''
+        # FIXME: The cursor position label is momentarily covered by
+        # the background of the menu as it slides away.
+        if self._position_label is not None:
+            self.remove(self._position_label)
+            self._status_area.pop_in_cursor_position_label()
+            self._position_label = None
+        self._stack.props.visible_child = self._status_area
+
+
 class Editor(Gtk.ApplicationWindow):
     __ROW_TEXT_VIEW = 0
     __ROW_MENU = 1
@@ -222,53 +322,27 @@ class Editor(Gtk.ApplicationWindow):
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
-
-        self.__menu_overlay = Gtk.Overlay()
-        grid.attach(self.__menu_overlay, 0, self.__ROW_MENU, 1, 1)
         
-        self.__menu_stack = Gtk.Stack()
-        self.__menu_stack.props.transition_type = (
-            Gtk.StackTransitionType.OVER_UP_DOWN)
-        self.__menu_overlay.add(self.__menu_stack)
+        self.__menu_stack = MenuStack()
+        grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
-        self.__position_label = None
-
-        self.__status_area = StatusArea()
-        self.__menu_stack.add(self.__status_area)
-        self.__status_area.show_all()
-
-        self.__right_menu = RMenu()
-        self.__right_menu.show_all()
-        self.__menu_stack.add(self.__right_menu)
-        self.__right_menu.bind_key(_('New'), self._on_new, 0, 1)
-        self.__right_menu.bind_key(_('Close'), self._on_close, 0, 2)
-        self.__right_menu.bind_key(_('Open'), self._on_open, 0, 3)
-        self.__right_menu.bind_key(_('Find'),
-                                   lambda b: print('“Find” activated'), 1, 1)
-        self.__right_menu.bind_key(_('Save'), self._on_save, 1, 2)
-
-        self.__left_menu = LMenu()
-        self.__left_menu.show_all()
-        self.__menu_stack.add(self.__left_menu)
-        self.__left_menu.bind_key(_('Undo'),
-                                  lambda b: print('“Undo” activated'), 2, 0)
-        self.__left_menu.bind_key(_('Cut'), self._on_cut, 2, 1)
-        self.__left_menu.bind_key(_('Copy'), self._on_copy, 2, 2)
-        self.__left_menu.bind_key(_('Paste'), self._on_paste, 2, 3)
-        self.__left_menu.bind_key('↑', self._on_up, 0, 2)
-        self.__left_menu.bind_key('←', self._on_left, 1, 1)
-        self.__left_menu.bind_key('↓', self._on_down, 1, 2)
-        self.__left_menu.bind_key('→', self._on_right, 1, 3)
-        self.__left_menu.bind_key('← Word', self._on_left_word, 0, 1)
-        self.__left_menu.bind_key('→ Word', self._on_right_word, 0, 3)
+        menu_handler_prefix = '_on_menu_'
+        for name, object_ in vars(type(self)).items():
+            if (name.startswith(menu_handler_prefix)
+                    and isinstance(object_, types.FunctionType)):
+                signal_name = name[len(menu_handler_prefix):].replace('_', '-')
+                self.__menu_stack.connect('activate::' + signal_name,
+                                          getattr(self, name))
 
         tv_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN,
                                          expand=True)
 
         self.__text_view = Gtk.TextView(expand=True)
         tv_scroller.add(self.__text_view)
-        self.__text_view.connect('key-press-event', self._on_key_event)
-        self.__text_view.connect('key-release-event', self._on_key_event)
+        self.__text_view.connect('key-press-event',
+            lambda text_view, event: self.__menu_stack.key_event(event))
+        self.__text_view.connect('key-release-event',
+            lambda text_view, event: self.__menu_stack.key_event(event))
         self.__text_view.connect('focus-out-event', self._on_focus_out_event)
         self.buffer.connect('mark-set', self._on_mark_set)
         self._on_cursor_position_changed(self.buffer.get_start_iter())
@@ -277,7 +351,7 @@ class Editor(Gtk.ApplicationWindow):
             grid.attach(tv_scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
             self.buffer.connect('changed', self._on_buffer_changed)
         else:
-            hgrid= Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+            hgrid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
             label = Gtk.Label(_('Loading…'))
             hgrid.add(label)
             cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
@@ -314,53 +388,14 @@ class Editor(Gtk.ApplicationWindow):
         return self.__text_view.props.buffer
 
     @property
-    def status_area(self):
-        return self.__status_area
-
-    @property
     def filename(self):
         if self._file is None:
             return None
         else:
             return self._file.get_path()
 
-    def _on_key_event(self, _text_view, event):
-        if (event.keyval == Gdk.KEY_Control_L
-                and self.__menu_stack.props.visible_child
-                    is not self.__left_menu):
-            if event.type == Gdk.EventType.KEY_PRESS:
-                self.__menu_stack.props.visible_child = self.__right_menu
-            else:
-                self.__menu_stack.props.visible_child = self.status_area
-            return True
-        if (event.keyval == Gdk.KEY_Control_R
-                and self.__menu_stack.props.visible_child
-                    is not self.__right_menu):
-            if event.type == Gdk.EventType.KEY_PRESS:
-                self.__menu_stack.props.visible_child = self.__left_menu
-                self.__position_label = (
-                    self.__status_area.pop_out_cursor_position_label())
-                self.__position_label.props.halign = Gtk.Align.END
-                self.__position_label.props.valign = Gtk.Align.START
-                self.__menu_overlay.add_overlay(self.__position_label)
-            else:
-                # FIXME: The cursor position label is momentarily
-                # covered by the background of the menu as it slides
-                # away.
-                self.__menu_overlay.remove(self.__position_label)
-                self.status_area.pop_in_cursor_position_label()
-                self.__position_label = None
-                self.__menu_stack.props.visible_child = self.status_area
-            return True
-        if (self.__menu_stack.props.visible_child is not self.status_area
-                and event.type == Gdk.EventType.KEY_PRESS):
-            menu = self.__menu_stack.props.visible_child
-            menu.key_press(event.keyval)
-            return True
-        return False
-
     def _on_focus_out_event(self, _text_view, event):
-        self.__menu_stack.props.visible_child = self.status_area
+        self.__menu_stack.show_status_area()
         return False
 
     def _on_mark_set(self, _buffer, location, mark):
@@ -373,18 +408,18 @@ class Editor(Gtk.ApplicationWindow):
         self._saved = False
 
     def _on_cursor_position_changed(self, location):
-        self.status_area.set_cursor_position(
+        self.__menu_stack.status_area.set_cursor_position(
             location.get_line(), location.get_line_offset())
 
-    def _on_new(self, _button):
+    def _on_menu_new(self, _button):
         if self.props.application is not None:
             self.props.application.activate()
 
     def do_delete_event(self, _event):
-        self._on_close()
+        self._on_menu_close()
         return True
 
-    def _on_close(self, _button=None):
+    def _on_menu_close(self, _button=None):
         if not self._saved:
             DISCARD = 0
             SAVE = 1
@@ -414,10 +449,10 @@ class Editor(Gtk.ApplicationWindow):
             self.props.application.remove_window(self)
         self.destroy()
 
-    def _on_open(self, _button):
+    def _on_menu_open(self, _button):
         self.props.application.show_open_dialog(self)
 
-    def _on_save(self, _button=None):
+    def _on_menu_save(self, _button=None):
         if self._file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
@@ -429,9 +464,9 @@ class Editor(Gtk.ApplicationWindow):
         assert self._file is not None
         assert self._file.get_path() is not None
         cancellable = Gio.Cancellable()
-        cancel_handler = self.status_area.connect(
+        cancel_handler = self.__menu_stack.status_area.connect(
             'save-cancel-clicked', lambda b: cancellable.cancel())
-        self.status_area.show_save_status()
+        self.__menu_stack.status_area.show_save_status()
         contents = self.buffer.props.text.encode(errors='replace')
         self._file.replace_contents_async(
             contents, self._etag, False, Gio.FileCreateFlags.NONE, cancellable,
@@ -502,47 +537,55 @@ class Editor(Gtk.ApplicationWindow):
 
     def _save_terminated(self, cancel_handler):
         '''Called when a save is finished or aborted due to error'''
-        self.status_area.disconnect(cancel_handler)
-        self.status_area.hide_save_status()
+        self.__menu_stack.status_area.disconnect(cancel_handler)
+        self.__menu_stack.status_area.hide_save_status()
 
-    def _on_cut(self, _button):
+    def _on_menu_cut(self, _button):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.cut_clipboard(clip, True)
 
-    def _on_copy(self, _button):
+    def _on_menu_copy(self, _button):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.copy_clipboard(clip)
 
-    def _on_paste(self, _button):
+    def _on_menu_paste(self, _button):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.paste_clipboard(clip, None, True)
 
-    def _on_up(self, _button):
+    def _on_menu_up(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.DISPLAY_LINES, -1, False)
 
-    def _on_down(self, _button):
+    def _on_menu_down(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.DISPLAY_LINES, 1, False)
 
-    def _on_left(self, _button):
+    def _on_menu_left(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.VISUAL_POSITIONS, -1, False)
 
-    def _on_right(self, _button):
+    def _on_menu_right(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.VISUAL_POSITIONS, 1, False)
 
-    def _on_left_word(self, _button):
+    def _on_menu_left_word(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.WORDS, -1, False)
 
-    def _on_right_word(self, _button):
+    def _on_menu_right_word(self, _button):
         self.__text_view.emit('move-cursor',
                               Gtk.MovementStep.WORDS, 1, False)
 
 
 def home_substitute(filename):
+    '''
+        Replace home directory with '~'
+
+        If ‘filename’ refers to a file in the user’s home directory,
+        return ‘filename’ with the home directory path replaced by '~',
+        otherwise return ‘filename’ unmodified.  ‘filename’ should be
+        an absolute path.
+    '''
     home = GLib.get_home_dir()
     if not home:
         return filename

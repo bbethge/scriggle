@@ -227,7 +227,7 @@ class MenuStack(Gtk.Overlay):
         self.__right_menu = RMenu()
         self.__right_menu.show_all()
         self.__stack.add(self.__right_menu)
-        self.__right_menu.bind_key(_('New'), self.__emitter('new'), 0, 1)
+        self.__right_menu.bind_key(_('New'), self.__emitter('new'), 2, 0)
         self.__right_menu.bind_key(_('Close'), self.__emitter('close'), 0, 2)
         self.__right_menu.bind_key(_('Open'), self.__emitter('open'), 0, 3)
         self.__right_menu.bind_key(_('Find'),

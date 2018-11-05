@@ -192,8 +192,11 @@ class Menu(Gtk.Grid):
         a key-press event and emitting it on ‘self’ (read: I couldn’t
         make that work).
         """
-        if keyval in self.__items:
-            self.__items[keyval].emit('clicked')
+        try:
+            item = self.__items[keyval]
+        except KeyError:
+            return
+        item.emit('clicked')
 
 
 class StatusArea(Gtk.Grid):
@@ -260,10 +263,95 @@ class StatusArea(Gtk.Grid):
         self.add(self.__cursor_position_label)
 
 
+class LanguageList(Gtk.IconView):
+    COLUMN_ID = 0
+    COLUMN_TEXT = 1
+
+    def __init__(self, **props):
+        super().__init__(**dict(text_column=self.COLUMN_TEXT, item_padding=0,
+                                item_orientation=Gtk.Orientation.HORIZONTAL,
+                                row_spacing=0, activate_on_single_click=True,
+                                # TODO: Remove hard-coded size?
+                                item_width=144, **props))
+        model = Gtk.ListStore(str, str)
+        model.insert(-1, ['plain', _('Plain')])
+        lang_man = GtkSource.LanguageManager.get_default()
+        for lang_id in lang_man.props.language_ids:
+            lang = lang_man.get_language(lang_id)
+            if not lang.props.hidden:
+                model.insert(-1, [lang_id, lang.props.name])
+        self.props.model = model
+        self.__search_string = ''
+        self.__previous_selection = None
+        self.__search_timeout = 0
+        self.__select_item(Gtk.TreePath.new_first())
+
+    def __select_item(self, path):
+        self.set_cursor(path, None, False)
+        # XXX: set_cursor should select the cursor path, but it doesn’t
+        # seem to.  Is it something to do with the CellRenderer?
+        self.select_path(path)
+
+    def do_key_press_event(self, event):
+        if Gtk.IconView.do_key_press_event(self, event):
+            return True
+        else:
+            codepoint = Gdk.keyval_to_unicode(event.keyval)
+            if event.keyval == Gdk.KEY_BackSpace:
+                if self.__search_string:
+                    self.__search_string = self.__search_string[:-1]
+                self.__update_search()
+                return True
+            elif event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                return False
+            elif codepoint:
+                if not self.__search_string:
+                    iters = self.get_selected_items()
+                    if iters:
+                        self.__previous_selection = iters[0]
+                self.__search_string += chr(codepoint)
+                self.__update_search()
+                return True
+            else:
+                return False
+
+    def __update_search(self):
+        """
+        Update the selection and reset the search timeout.
+
+        Update the selection to the first item that starts (case-
+        insensitively) with self.__search_string.  If
+        self.__search_string is empty, reset the selection to
+        self.__previous_selection instead.  Then reset the search
+        timeout."""
+        def callback(model, path, iter_):
+            name, = model.get(iter_, self.COLUMN_TEXT)
+            name = name.casefold().replace(' ', '')
+            search_string = self.__search_string.casefold().replace(' ', '')
+            if name.startswith(search_string):
+                self.__select_item(path)
+                return True
+            else:
+                return False
+        if self.__search_string:
+            self.props.model.foreach(callback)
+        elif self.__previous_selection is not None:
+            self.__select_item(self.__previous_selection)
+        if self.__search_timeout:
+            GLib.source_remove(self.__search_timeout)
+        self.__search_timeout = GLib.timeout_add(1000,
+                                                 self.__clear_search_string)
+
+    def __clear_search_string(self):
+        self.__search_string = ''
+        self.__search_timeout = 0
+
+
 class MenuStack(Gtk.Overlay):
     def __init__(self, **props):
         super().__init__(**props)
         self.__history = []
+        self.__menu_pinned = False
 
         self.__stack = Gtk.Stack(
             transition_type=Gtk.StackTransitionType.OVER_UP_DOWN)
@@ -278,7 +366,7 @@ class MenuStack(Gtk.Overlay):
         self.__right_menu = Menu(Menu.Side.RIGHT)
         self.__right_menu.show_all()
         self.__stack.add(self.__right_menu)
-        self.__right_menu.bind_key('y', _('Format…'), self._on_format)
+        self.__right_menu.bind_key('y', _('Format…'), self.__on_format)
         self.__right_menu.bind_key('n', _('New'), self.__emitter('new'))
         self.__right_menu.bind_key('i', _('Close'), self.__emitter('close'))
         self.__right_menu.bind_key('o', _('Open…'), self.__emitter('open'))
@@ -303,17 +391,28 @@ class MenuStack(Gtk.Overlay):
         self.__format_menu = Menu(Menu.Side.RIGHT)
         self.__format_menu.show_all()
         self.__stack.add(self.__format_menu)
-        self.__format_menu.bind_key('bracketright', _('Back'), self._on_back)
-        self.__format_menu.bind_key('j', _('Language…'),
-                                    lambda b: print('“Language” activated'))
+        self.__format_menu.bind_key('bracketright', _('Back'), self.__on_back)
+        self.__format_menu.bind_key('j', _('Language…'), self.__on_language)
         self.__format_menu.bind_key('k', _('Use Spaces'),
                                     lambda b: print('“Use Spaces” activated'))
         self.__format_menu.bind_key('l', _('Tab Width'),
                                     lambda b: print('“Tab Width” activated'))
-        # TODO: Pop up an icon-less Gtk.IconView with source language
-        # names when ‘Language…’ is activated, make it stay up when
-        # Ctrl is released, focus the icon view, and allow activating
-        # the back button with Ctrl-].
+
+        lang_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN)
+        self.__language_menu = Menu(Menu.Side.RIGHT,
+                                    [[0, 0, 24, 3, lang_scroller]])
+        self.__stack.add(self.__language_menu)
+        self.__language_menu.bind_key('bracketright', _('Back'),
+                                      self.__on_back)
+        self.__language_list = LanguageList()
+        lang_scroller.add(self.__language_list)
+        self.__language_list.connect('selection-changed',
+                                     self.__on_language_changed)
+        # FIXME: This signal doesn’t fire when pressing Enter on
+        # the language list.
+        self.__language_list.connect('item-activated',
+                                     self.__on_language_activated)
+        self.__language_menu.show_all()
 
     def __emitter(self, action):
         """
@@ -324,12 +423,30 @@ class MenuStack(Gtk.Overlay):
         """
         return lambda _button: self.emit('activate::' + action)
 
-    def _on_back(self, button):
+    def __on_back(self, button):
         self.__stack.props.visible_child = self.__history.pop()
+        self.__menu_pinned = False
 
-    def _on_format(self, button):
+    def __on_format(self, button):
         self.__history.append(self.__stack.props.visible_child)
         self.__stack.props.visible_child = self.__format_menu
+
+    def __on_language(self, button):
+        self.__history.append(self.__stack.props.visible_child)
+        self.__stack.props.visible_child = self.__language_menu
+        self.__menu_pinned = True
+        self.__language_list.grab_focus()
+
+    def __on_language_changed(self, language_list):
+        iters = language_list.get_selected_items()
+        if iters:
+            iter_ = language_list.props.model.get_iter(iters[0])
+            id_, = language_list.props.model.get(iter_, language_list.COLUMN_ID)
+            self.emit('language-changed', id_)
+
+    def __on_language_activated(self, language_list, path):
+        self.show_status_area()
+        self.__menu_pinned = False
 
     @GObject.Signal(flags = GObject.SignalFlags.RUN_FIRST
                           | GObject.SignalFlags.DETAILED)
@@ -342,38 +459,48 @@ class MenuStack(Gtk.Overlay):
         """
         pass
 
+    @GObject.Signal(arg_types=(str,))
+    def language_changed(self, language_id):
+        pass
+
     @property
     def status_area(self):
         return self.__status_area
 
     def key_event(self, event):
         """Handle a key event from the text view."""
-        if (event.keyval == Gdk.KEY_Control_L
-                and self.__stack.props.visible_child is not self.__left_menu):
-            if event.type == Gdk.EventType.KEY_PRESS:
-                self.__stack.props.visible_child = self.__right_menu
-            else:
-                # We don’t really need self.show_status_area here
-                self.__stack.props.visible_child = self.__status_area
-            return True
-        if (event.keyval == Gdk.KEY_Control_R
-                and self.__stack.props.visible_child is not self.__right_menu):
-            if event.type == Gdk.EventType.KEY_PRESS:
-                self.__stack.props.visible_child = self.__left_menu
-                self.__position_label = (
-                    self.__status_area.pop_out_cursor_position_label())
-                self.__position_label.props.halign = Gtk.Align.END
-                self.__position_label.props.valign = Gtk.Align.START
-                self.add_overlay(self.__position_label)
-            else:
-                self.show_status_area()
-            return True
-        if (self.__stack.props.visible_child is not self.__status_area
-                and event.type == Gdk.EventType.KEY_PRESS):
-            menu = self.__stack.props.visible_child
-            menu.key_press(event.keyval)
+        if event.type == Gdk.EventType.KEY_PRESS:
+            menu = None
+            if event.keyval == Gdk.KEY_Control_L:
+                menu = self.__right_menu
+            elif event.keyval == Gdk.KEY_Control_R:
+                menu = self.__left_menu
+            if menu is not None:
+                if not self.__menu_pinned:
+                    self.__show_menu(menu)
+                return True
+            elif self.__stack.props.visible_child is not self.__status_area:
+                self.__stack.props.visible_child.key_press(event.keyval)
+                return True
+        elif (event.keyval in (Gdk.KEY_Control_L, Gdk.KEY_Control_R)
+                and not self.__menu_pinned):
+            self.show_status_area()
             return True
         return False
+
+    def __show_menu(self, menu):
+        self.__stack.props.visible_child = menu
+        if menu.side == Menu.Side.LEFT:
+            self.__position_label = (
+                self.__status_area.pop_out_cursor_position_label())
+            self.__position_label.props.halign = Gtk.Align.END
+            self.__position_label.props.valign = Gtk.Align.START
+            self.add_overlay(self.__position_label)
+
+    def window_focus_changed(self, focused):
+        """Notify ‘self’ of focus changes in its toplevel window"""
+        if not focused and not self.__menu_pinned:
+            self.show_status_area()
 
     def show_status_area(self):
         """Hide any shown menu and show the status area instead."""
@@ -403,6 +530,8 @@ class Editor(Gtk.ApplicationWindow):
         
         self.__menu_stack = MenuStack()
         grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
+        self.__menu_stack.connect('language-changed',
+                                  self.__on_language_changed)
 
         menu_handler_prefix = '_on_menu_'
         for name, object_ in vars(type(self)).items():
@@ -418,11 +547,6 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view = GtkSource.View(expand=True)
         scroller.add(self.__source_view)
         scroller.show_all()
-        self.__source_view.connect('key-press-event',
-            lambda view, event: self.__menu_stack.key_event(event))
-        self.__source_view.connect('key-release-event',
-            lambda view, event: self.__menu_stack.key_event(event))
-        self.__source_view.connect('focus-out-event', self.__on_focus_out_event)
         self.buffer.connect('mark-set', self.__on_mark_set)
         self.__on_cursor_position_changed(self.buffer.get_start_iter())
 
@@ -482,9 +606,24 @@ class Editor(Gtk.ApplicationWindow):
         else:
             return self.__file.get_path()
 
-    def __on_focus_out_event(self, _source_view, event):
-        self.__menu_stack.show_status_area()
-        return False
+    def do_window_state_event(self, event):
+        if event.changed_mask & Gdk.WindowState.FOCUSED:
+            self.__menu_stack.window_focus_changed(
+                bool(event.new_window_state & Gdk.WindowState.FOCUSED))
+        return Gtk.ApplicationWindow.do_window_state_event(self, event)
+
+    def do_key_press_event(self, event):
+        if (event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
+                or event.state & Gdk.ModifierType.CONTROL_MASK):
+            return self.__menu_stack.key_event(event)
+        else:
+            return Gtk.ApplicationWindow.do_key_press_event(self, event)
+
+    def do_key_release_event(self, event):
+        if (event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
+                or event.state & Gdk.ModifierType.CONTROL_MASK):
+            return self.__menu_stack.key_event(event)
+        return Gtk.ApplicationWindow.do_key_release_event(self, event)
 
     def __on_mark_set(self, _buffer, location, mark):
         if mark.props.name == 'insert':
@@ -498,6 +637,13 @@ class Editor(Gtk.ApplicationWindow):
     def __on_cursor_position_changed(self, location):
         self.__menu_stack.status_area.set_cursor_position(
             location.get_line(), location.get_line_offset())
+
+    def __on_language_changed(self, _stack, language_id):
+        lang_man = GtkSource.LanguageManager.get_default()
+        if language_id == 'plain':
+            self.buffer.set_language(None)
+        else:
+            self.buffer.set_language(lang_man.get_language(language_id))
 
     def _on_menu_new(self, _widget):
         if self.props.application is not None:

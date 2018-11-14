@@ -16,7 +16,6 @@ spend time reaching for the mouse.
 import gettext
 from gettext import gettext as _
 import os
-import types
 import weakref
 
 import gi
@@ -27,50 +26,65 @@ gtk_minor_version = 14
 from gi.repository import GLib, GObject, Gio, Gdk, Pango, Gtk, GtkSource
 
 
-class MenuItem(Gtk.Button):
+def make_menu_item_class(superclass):
     """
-    A button on a keyboard-shaped menu.
+    Return a new class of menu items.
 
-    A button that has a key associated with it and is activated by that
-    key.  It goes inside a Menu.
+    Create and return a new class derived from the Gtk.Button
+    (sub)class ‘superclass’.  This class will have all the
+    functionality needed to be used in a Menu.
     """
-    def __init__(self, **props):
-        super().__init__(**dict(focus_on_click=False, **props))
+    class MenuItem(superclass):
+        """
+        A button on a keyboard-shaped menu.
 
-        self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
-        self.add(self.__grid)
+        A button that has a key associated with it and is activated by that
+        key.  It goes inside a Menu.
+        """
+        def __init__(self, **props):
+            superclass.__init__(self, **dict(focus_on_click=False, **props))
 
-        self.__label = Gtk.Label(use_underline=True, hexpand=True,
-                                 halign=Gtk.Align.START)
-        self.__label.props.ellipsize = Pango.EllipsizeMode.END
-        self.__grid.add(self.__label)
+            self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+            self.add(self.__grid)
 
-        self.__keyval_label = Gtk.Label()
-        self.__grid.add(self.__keyval_label)
+            self.__label = Gtk.Label(use_underline=True, hexpand=True,
+                                     halign=Gtk.Align.START)
+            self.__label.props.ellipsize = Pango.EllipsizeMode.END
+            self.__grid.add(self.__label)
 
-        self.__grid.show_all()
+            self.__keyval_label = Gtk.Label()
+            self.__grid.add(self.__keyval_label)
 
-        self.keyval = None
-        self.label = None
+            self.__grid.show_all()
 
-    @property
-    def keyval(self):
-        return self.__keyval
-    @keyval.setter
-    def keyval(self, keyval):
-        if keyval is not None:
-            kvs = chr(Gdk.keyval_to_unicode(keyval))
-            self.__keyval_label.set_markup(
-                '<b> '+GLib.markup_escape_text(kvs)+'</b>')
-        else:
-            self.__keyval_label.props.label = ''
+            self.keyval = None
+            self.label = None
 
-    @property
-    def label(self):
-        return self.__label.props.label
-    @label.setter
-    def label(self, label):
-        self.__label.props.label = label
+        @property
+        def keyval(self):
+            return self.__keyval
+        @keyval.setter
+        def keyval(self, keyval):
+            if keyval is not None:
+                kvs = chr(Gdk.keyval_to_unicode(keyval))
+                self.__keyval_label.set_markup(
+                    f'<b> {GLib.markup_escape_text(kvs)}</b>')
+            else:
+                self.__keyval_label.set_markup('')
+            self.__keyval = keyval
+
+        @property
+        def label(self):
+            return self.__label.props.label
+        @label.setter
+        def label(self, label):
+            self.__label.props.label = label
+
+    return MenuItem
+
+
+MenuItem = make_menu_item_class(Gtk.Button)
+ToggleMenuItem = make_menu_item_class(Gtk.ToggleButton)
 
 
 class Menu(Gtk.Grid):
@@ -143,6 +157,9 @@ class Menu(Gtk.Grid):
         return self.get_child_at(self.__key_coörds_to_grid_col(row, column),
                                  row)
 
+    def __get_item_coördinates(self, item):
+        return self.child_get(item, 'top-attach', 'left-attach')
+
     @property
     def side(self):
         return self.__side
@@ -155,10 +172,48 @@ class Menu(Gtk.Grid):
         it is activated, and label it with ‘label’.
         """ 
         item = self.__items[Gdk.keyval_from_name(name)]
+        if isinstance(item, ToggleMenuItem):
+            item = self.__reinstall_item(item, MenuItem)
         item.label = label
         item.props.sensitive = True
         item.__handler_id = item.connect('clicked', callback)
 
+    def __reinstall_item(self, item, class_):
+        """
+        Replace the menu item with a ‘class_’ object.
+
+        Remove ‘item’ from ‘self’ and replace it with a new item of
+        class ‘class_’ having the same keyval.  Return the new item.
+        """
+        keyval = item.keyval
+        row, col = self.__get_item_coördinates(item)
+        self.remove(item)
+        if hasattr(item, '_Menu__handler_id'):
+            item.disconnect(item.__handler_id)
+            del item.__handler_id
+        new_item = class_(sensitive=False)
+        new_item.keyval = keyval
+        new_item.show()
+        self.attach(new_item, col, row, 4, 1)
+        self.__items[keyval] = new_item
+        return new_item
+
+    def bind_toggle_key(self, name, label, callback):
+        """
+        Make the key a ToggleMenuItem.
+
+        Turn the MenuItem with keyval name ‘name’ into a ToggleMenuItem
+        that calls ‘callback’ with the new button state when it is
+        toggled, and label it with ‘label’.
+        """
+        item = self.__items[Gdk.keyval_from_name(name)]
+        if isinstance(item, MenuItem):
+            item = self.__reinstall_item(item, ToggleMenuItem)
+        item.label = label
+        item.props.sensitive = True
+        item.__handler_id = item.connect(
+            'toggled', lambda button: callback(button.props.active))
+        
     def unbind_key(self, name):
         """Unbind the MenuItem with the given keyval name"""
         item = self.__items[Gdk.keyval_from_name(name)]
@@ -348,8 +403,18 @@ class LanguageList(Gtk.IconView):
 
 
 class MenuStack(Gtk.Overlay):
-    def __init__(self, **props):
+    def __init__(self, window, **props):
+        """
+        Create a new MenuStack
+
+        Create a new MenuStack, with a status area and all menus.
+        ‘window’ is the widget that contains this stack, and should
+        implement handlers (named starting with 'on_') for all actions
+        that can be triggered by menu items.  ‘window’ is weakly
+        referenced, so it must be around as long as the MenuStack.
+        """
         super().__init__(**props)
+        self.__window = weakref.proxy(window)
         self.__history = []
         self.__menu_pinned = False
 
@@ -367,34 +432,34 @@ class MenuStack(Gtk.Overlay):
         self.__right_menu.show_all()
         self.__stack.add(self.__right_menu)
         self.__right_menu.bind_key('y', _('Format…'), self.__on_format)
-        self.__right_menu.bind_key('n', _('New'), self.__emitter('new'))
-        self.__right_menu.bind_key('i', _('Close'), self.__emitter('close'))
-        self.__right_menu.bind_key('o', _('Open…'), self.__emitter('open'))
+        self.__right_menu.bind_key('n', _('New'), self.__window.on_new)
+        self.__right_menu.bind_key('i', _('Close'), self.__window.on_close)
+        self.__right_menu.bind_key('o', _('Open…'), self.__window.on_open)
         self.__right_menu.bind_key('j', _('Find'),
                                    lambda b: print('“Find” activated'))
-        self.__right_menu.bind_key('k', _('Save'), self.__emitter('save'))
+        self.__right_menu.bind_key('k', _('Save'), self.__window.on_save)
 
         self.__left_menu = Menu(Menu.Side.LEFT)
         self.__left_menu.show_all()
         self.__stack.add(self.__left_menu)
-        self.__left_menu.bind_key('z', _('Undo'), self.__emitter('undo'))
-        self.__left_menu.bind_key('x', _('Cut'), self.__emitter('cut'))
-        self.__left_menu.bind_key('c', _('Copy'), self.__emitter('copy'))
-        self.__left_menu.bind_key('v', _('Paste'), self.__emitter('paste'))
-        self.__left_menu.bind_key('e', '↑', self.__emitter('up'))
-        self.__left_menu.bind_key('s', '←', self.__emitter('left'))
-        self.__left_menu.bind_key('d', '↓', self.__emitter('down'))
-        self.__left_menu.bind_key('f', '→', self.__emitter('right'))
-        self.__left_menu.bind_key('w', '← Word', self.__emitter('left-word'))
-        self.__left_menu.bind_key('r', '→ Word', self.__emitter('right-word'))
+        self.__left_menu.bind_key('z', _('Undo'), self.__window.on_undo)
+        self.__left_menu.bind_key('x', _('Cut'), self.__window.on_cut)
+        self.__left_menu.bind_key('c', _('Copy'), self.__window.on_copy)
+        self.__left_menu.bind_key('v', _('Paste'), self.__window.on_paste)
+        self.__left_menu.bind_key('e', '↑', self.__window.on_up)
+        self.__left_menu.bind_key('s', '←', self.__window.on_left)
+        self.__left_menu.bind_key('d', '↓', self.__window.on_down)
+        self.__left_menu.bind_key('f', '→', self.__window.on_right)
+        self.__left_menu.bind_key('w', '← Word', self.__window.on_left_word)
+        self.__left_menu.bind_key('r', '→ Word', self.__window.on_right_word)
 
         self.__format_menu = Menu(Menu.Side.RIGHT)
         self.__format_menu.show_all()
         self.__stack.add(self.__format_menu)
         self.__format_menu.bind_key('bracketright', _('Back'), self.__on_back)
         self.__format_menu.bind_key('j', _('Language…'), self.__on_language)
-        self.__format_menu.bind_key('k', _('Use Spaces'),
-                                    lambda b: print('“Use Spaces” activated'))
+        self.__format_menu.bind_toggle_key('k', _('Use Spaces'),
+                                           self.__window.on_use_spaces)
         self.__format_menu.bind_key('l', _('Tab Width'),
                                     lambda b: print('“Tab Width” activated'))
 
@@ -408,20 +473,9 @@ class MenuStack(Gtk.Overlay):
         lang_scroller.add(self.__language_list)
         self.__language_list.connect('selection-changed',
                                      self.__on_language_changed)
-        # FIXME: This signal doesn’t fire when pressing Enter on
-        # the language list.
         self.__language_list.connect('item-activated',
                                      self.__on_language_activated)
         self.__language_menu.show_all()
-
-    def __emitter(self, action):
-        """
-        Create a closure to emit the ‘activate’ signal.
-
-        Create a closure which will will emit the ‘activate’ signal
-        with ‘action’ as the signal detail.
-        """
-        return lambda _button: self.emit('activate::' + action)
 
     def __on_back(self, button):
         self.__stack.props.visible_child = self.__history.pop()
@@ -441,23 +495,13 @@ class MenuStack(Gtk.Overlay):
         iters = language_list.get_selected_items()
         if iters:
             iter_ = language_list.props.model.get_iter(iters[0])
-            id_, = language_list.props.model.get(iter_, language_list.COLUMN_ID)
+            id_, = language_list.props.model.get(iter_,
+                                                 language_list.COLUMN_ID)
             self.emit('language-changed', id_)
 
     def __on_language_activated(self, language_list, path):
         self.show_status_area()
         self.__menu_pinned = False
-
-    @GObject.Signal(flags = GObject.SignalFlags.RUN_FIRST
-                          | GObject.SignalFlags.DETAILED)
-    def activate(self):
-        """
-        Emitted when a MenuItem is activated.
-
-        The signal detail is an identifier for the action to be
-        performed, e.g., 'open' or 'save-as'.
-        """
-        pass
 
     @GObject.Signal(arg_types=(str,))
     def language_changed(self, language_id):
@@ -520,7 +564,6 @@ class Editor(Gtk.ApplicationWindow):
     def __init__(self, file=None, **props):
         super().__init__(**dict(default_width=640, default_height=480,
                          **props))
-        self.__etag = None
         self.__file = file
         self.__saved = True
         self.__close_after_save = False
@@ -528,23 +571,15 @@ class Editor(Gtk.ApplicationWindow):
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
         
-        self.__menu_stack = MenuStack()
+        self.__menu_stack = MenuStack(self)
         grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
         self.__menu_stack.connect('language-changed',
                                   self.__on_language_changed)
 
-        menu_handler_prefix = '_on_menu_'
-        for name, object_ in vars(type(self)).items():
-            if (name.startswith(menu_handler_prefix)
-                    and isinstance(object_, types.FunctionType)):
-                signal_name = name[len(menu_handler_prefix):].replace('_', '-')
-                self.__menu_stack.connect('activate::' + signal_name,
-                                          getattr(self, name))
-
         scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN,
                                       expand=True)
 
-        self.__source_view = GtkSource.View(expand=True)
+        self.__source_view = GtkSource.View(expand=True, monospace=True)
         scroller.add(self.__source_view)
         scroller.show_all()
         self.buffer.connect('mark-set', self.__on_mark_set)
@@ -645,15 +680,18 @@ class Editor(Gtk.ApplicationWindow):
         else:
             self.buffer.set_language(lang_man.get_language(language_id))
 
-    def _on_menu_new(self, _widget):
+    def on_use_spaces(self, use_spaces):
+        self.__source_view.props.insert_spaces_instead_of_tabs = use_spaces
+
+    def on_new(self, _widget):
         if self.props.application is not None:
             self.props.application.activate()
 
     def do_delete_event(self, _event):
-        self._on_menu_close()
+        self.on_close()
         return True
 
-    def _on_menu_close(self, _widget=None):
+    def on_close(self, _widget=None):
         if not self.__saved:
             DISCARD = 0
             SAVE = 1
@@ -674,7 +712,7 @@ class Editor(Gtk.ApplicationWindow):
                 return
             elif response == SAVE:
                 self.__close_after_save = True
-                self._on_menu_save()
+                self.on_save()
                 return
         self.__finish_close()
 
@@ -688,10 +726,10 @@ class Editor(Gtk.ApplicationWindow):
             self.props.application.remove_window(self)
         self.destroy()
 
-    def _on_menu_open(self, _widget):
+    def on_open(self, _widget):
         self.props.application.show_open_dialog(self)
 
-    def _on_menu_save(self, _widget=None):
+    def on_save(self, _widget=None):
         if self.__file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
@@ -740,44 +778,44 @@ class Editor(Gtk.ApplicationWindow):
         self.__menu_stack.status_area.disconnect(cancel_handler)
         self.__menu_stack.status_area.hide_save_status()
 
-    def _on_menu_undo(self, _widget):
+    def on_undo(self, _widget):
         # TODO: Set sensitivity of the button depending on
         # self.buffer.can_undo.
         self.buffer.undo()
 
-    def _on_menu_cut(self, _widget):
+    def on_cut(self, _widget):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.cut_clipboard(clip, True)
 
-    def _on_menu_copy(self, _widget):
+    def on_copy(self, _widget):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.copy_clipboard(clip)
 
-    def _on_menu_paste(self, _widget):
+    def on_paste(self, _widget):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.paste_clipboard(clip, None, True)
 
-    def _on_menu_up(self, _widget):
+    def on_up(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.DISPLAY_LINES, -1, False)
 
-    def _on_menu_down(self, _widget):
+    def on_down(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.DISPLAY_LINES, 1, False)
 
-    def _on_menu_left(self, _widget):
+    def on_left(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.VISUAL_POSITIONS, -1, False)
 
-    def _on_menu_right(self, _widget):
+    def on_right(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.VISUAL_POSITIONS, 1, False)
 
-    def _on_menu_left_word(self, _widget):
+    def on_left_word(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.WORDS, -1, False)
 
-    def _on_menu_right_word(self, _widget):
+    def on_right_word(self, _widget):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.WORDS, 1, False)
 

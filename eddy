@@ -26,65 +26,74 @@ gtk_minor_version = 14
 from gi.repository import GLib, GObject, Gio, Gdk, Pango, Gtk, GtkSource
 
 
-def make_menu_item_class(superclass):
+class MenuItemMixin:
     """
-    Return a new class of menu items.
+    Modify a Gtk.Button class to work with our menus.
 
-    Create and return a new class derived from the Gtk.Button
-    (sub)class ‘superclass’.  This class will have all the
-    functionality needed to be used in a Menu.
+    Inheriting from this class and a Gtk.Button (sub)class makes a
+    button that has a key associated with it and is activated by that
+    key.  It goes inside a Menu.
     """
-    class MenuItem(superclass):
-        """
-        A button on a keyboard-shaped menu.
+    def __init__(self, **props):
+        super().__init__(**dict(focus_on_click=False, **props))
 
-        A button that has a key associated with it and is activated by that
-        key.  It goes inside a Menu.
-        """
-        def __init__(self, **props):
-            superclass.__init__(self, **dict(focus_on_click=False, **props))
+        self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+        self.add(self.__grid)
 
-            self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
-            self.add(self.__grid)
+        self.__label = Gtk.Label(use_underline=True, hexpand=True,
+                                 halign=Gtk.Align.START)
+        self.__label.props.ellipsize = Pango.EllipsizeMode.END
+        self.__grid.add(self.__label)
 
-            self.__label = Gtk.Label(use_underline=True, hexpand=True,
-                                     halign=Gtk.Align.START)
-            self.__label.props.ellipsize = Pango.EllipsizeMode.END
-            self.__grid.add(self.__label)
+        self.__keyval_label = Gtk.Label()
+        self.__grid.add(self.__keyval_label)
 
-            self.__keyval_label = Gtk.Label()
-            self.__grid.add(self.__keyval_label)
+        self.__grid.show_all()
 
-            self.__grid.show_all()
+        self.keyval = None
+        self.label = None
 
-            self.keyval = None
-            self.label = None
+    @property
+    def keyval(self):
+        return self.__keyval
+    @keyval.setter
+    def keyval(self, keyval):
+        if keyval is not None:
+            kvs = chr(Gdk.keyval_to_unicode(keyval))
+            self.__keyval_label.set_markup(
+                f'<b> {GLib.markup_escape_text(kvs)}</b>')
+        else:
+            self.__keyval_label.set_markup('')
+        self.__keyval = keyval
 
-        @property
-        def keyval(self):
-            return self.__keyval
-        @keyval.setter
-        def keyval(self, keyval):
-            if keyval is not None:
-                kvs = chr(Gdk.keyval_to_unicode(keyval))
-                self.__keyval_label.set_markup(
-                    f'<b> {GLib.markup_escape_text(kvs)}</b>')
-            else:
-                self.__keyval_label.set_markup('')
-            self.__keyval = keyval
-
-        @property
-        def label(self):
-            return self.__label.props.label
-        @label.setter
-        def label(self, label):
-            self.__label.props.label = label
-
-    return MenuItem
+    @property
+    def label(self):
+        return self.__label.props.label
+    @label.setter
+    def label(self, label):
+        self.__label.props.label = label
 
 
-MenuItem = make_menu_item_class(Gtk.Button)
-ToggleMenuItem = make_menu_item_class(Gtk.ToggleButton)
+class MenuItem(MenuItemMixin, Gtk.Button):
+    def __init__(self, **props):
+        super().__init__(**props)
+
+    def key_event(self, event):
+        if event.type == Gdk.EventType.KEY_PRESS:
+            self.set_state_flags(Gtk.StateFlags.ACTIVE, False)
+        else:
+            self.unset_state_flags(Gtk.StateFlags.ACTIVE)
+            self.clicked()
+        return True
+
+
+class ToggleMenuItem(MenuItemMixin, Gtk.ToggleButton):
+    def __init__(self, **props):
+        super().__init__(**props)
+
+    def key_event(self, event):
+        if event.type == Gdk.EventType.KEY_PRESS:
+            self.props.active = not self.props.active
 
 
 class Menu(Gtk.Grid):
@@ -222,12 +231,6 @@ class Menu(Gtk.Grid):
         item.label = None
         del item.__handler_id
 
-    def do_key_press_event(self, event):
-        return self.key_press(event.keyval)
-
-    def do_key_release_event(self, event):
-        return self.key_press(event.keyval)
-
     @staticmethod
     def __key_coörds_to_grid_col(row, column):
         """
@@ -238,20 +241,18 @@ class Menu(Gtk.Grid):
         """
         return 4*column + row**2 - row//2
 
-    def key_press(self, keyval):
+    def key_event(self, event):
         """
-        Process a key-press event.
+        Process a key event.
 
-        Process a key-press event from another widget that should
-        activate one of our buttons.  This is simpler than synthesizing
-        a key-press event and emitting it on ‘self’ (read: I couldn’t
-        make that work).
+        Process a key event from another widget that should
+        activate one of our buttons.
         """
         try:
-            item = self.__items[keyval]
+            item = self.__items[event.keyval]
         except KeyError:
-            return
-        item.emit('clicked')
+            return False
+        return item.key_event(event)
 
 
 class StatusArea(Gtk.Grid):
@@ -294,7 +295,7 @@ class StatusArea(Gtk.Grid):
         display.
         """
         self.__cursor_position_label.set_text(
-            _('Line {line}, column {column}')
+            _('Line {line}, Column {column}')
             .format(line=line+1, column=column+1))
 
     def pop_out_cursor_position_label(self):
@@ -478,6 +479,9 @@ class MenuStack(Gtk.Overlay):
         self.__language_menu.show_all()
 
     def __on_back(self, button):
+        if hasattr(self, '_MenuStack__language_list_previous_focus'):
+            self.__language_list_previous_focus.grab_focus()
+            del self.__language_list_previous_focus
         self.__stack.props.visible_child = self.__history.pop()
         self.__menu_pinned = False
 
@@ -487,6 +491,7 @@ class MenuStack(Gtk.Overlay):
 
     def __on_language(self, button):
         self.__history.append(self.__stack.props.visible_child)
+        self.__language_list_previous_focus = self.get_toplevel().get_focus()
         self.__stack.props.visible_child = self.__language_menu
         self.__menu_pinned = True
         self.__language_list.grab_focus()
@@ -512,24 +517,21 @@ class MenuStack(Gtk.Overlay):
         return self.__status_area
 
     def key_event(self, event):
-        """Handle a key event from the text view."""
-        if event.type == Gdk.EventType.KEY_PRESS:
-            menu = None
-            if event.keyval == Gdk.KEY_Control_L:
-                menu = self.__right_menu
-            elif event.keyval == Gdk.KEY_Control_R:
-                menu = self.__left_menu
-            if menu is not None:
-                if not self.__menu_pinned:
+        """Handle a key event from the window."""
+        menu = None
+        if event.keyval == Gdk.KEY_Control_L:
+            menu = self.__right_menu
+        elif event.keyval == Gdk.KEY_Control_R:
+            menu = self.__left_menu
+        if menu is not None:
+            if not self.__menu_pinned:
+                if event.type == Gdk.EventType.KEY_PRESS:
                     self.__show_menu(menu)
-                return True
-            elif self.__stack.props.visible_child is not self.__status_area:
-                self.__stack.props.visible_child.key_press(event.keyval)
-                return True
-        elif (event.keyval in (Gdk.KEY_Control_L, Gdk.KEY_Control_R)
-                and not self.__menu_pinned):
-            self.show_status_area()
+                else:
+                    self.show_status_area()
             return True
+        elif self.__stack.props.visible_child is not self.__status_area:
+            return self.__stack.props.visible_child.key_event(event)
         return False
 
     def __show_menu(self, menu):

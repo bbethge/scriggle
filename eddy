@@ -173,17 +173,20 @@ class Menu(Gtk.Grid):
     def side(self):
         return self.__side
 
-    def bind_key(self, name, label, callback):
+    def bind_key(self, name, label, callback, tooltip=None):
         """
         Bind a key (MenuItem) to a callback.
 
         Make the MenuItem with keyval name ‘name’ call ‘callback’ when
-        it is activated, and label it with ‘label’.
+        it is activated, and label it with ‘label’.  ‘tooltip’ is Pango
+        markup to show as a tooltip.
         """ 
         item = self.__items[Gdk.keyval_from_name(name)]
         if isinstance(item, ToggleMenuItem):
             item = self.__reinstall_item(item, MenuItem)
         item.label = label
+        if tooltip is not None:
+            item.props.tooltip_markup = tooltip
         item.props.sensitive = True
         item.__handler_id = item.connect('clicked', callback)
 
@@ -207,18 +210,21 @@ class Menu(Gtk.Grid):
         self.__items[keyval] = new_item
         return new_item
 
-    def bind_toggle_key(self, name, label, callback):
+    def bind_toggle_key(self, name, label, callback, tooltip=None):
         """
         Make the key a ToggleMenuItem.
 
         Turn the MenuItem with keyval name ‘name’ into a ToggleMenuItem
         that calls ‘callback’ with the new button state when it is
-        toggled, and label it with ‘label’.
+        toggled, and label it with ‘label’.  ‘tooltip’ is Pango markup
+        to show as a tooltip.
         """
         item = self.__items[Gdk.keyval_from_name(name)]
         if isinstance(item, MenuItem):
             item = self.__reinstall_item(item, ToggleMenuItem)
         item.label = label
+        if tooltip is not None:
+            item.props.tooltip_markup = tooltip
         item.props.sensitive = True
         item.__handler_id = item.connect(
             'toggled', lambda button: callback(button.props.active))
@@ -432,9 +438,12 @@ class MenuStack(Gtk.Overlay):
         self.__right_menu = Menu(Menu.Side.RIGHT)
         self.__right_menu.show_all()
         self.__stack.add(self.__right_menu)
-        self.__right_menu.bind_key('y', _('Format…'), self.__on_format)
-        self.__right_menu.bind_key('n', _('New'), self.__window.on_new)
-        self.__right_menu.bind_key('i', _('Close'), self.__window.on_close)
+        self.__right_menu.bind_key('y', _('Style…'), self.__on_style,
+                                   tooltip=_('Options related to code style'))
+        self.__right_menu.bind_key('n', _('New'), self.__window.on_new,
+                                   tooltip=_('Create a new document'))
+        self.__right_menu.bind_key('i', _('Close'), self.__window.on_close,
+                                   tooltip=_('Close the current document'))
         self.__right_menu.bind_key('o', _('Open…'), self.__window.on_open)
         self.__right_menu.bind_key('j', _('Find'),
                                    lambda b: print('“Find” activated'))
@@ -447,29 +456,40 @@ class MenuStack(Gtk.Overlay):
         self.__left_menu.bind_key('x', _('Cut'), self.__window.on_cut)
         self.__left_menu.bind_key('c', _('Copy'), self.__window.on_copy)
         self.__left_menu.bind_key('v', _('Paste'), self.__window.on_paste)
-        self.__left_menu.bind_key('e', '↑', self.__window.on_up)
-        self.__left_menu.bind_key('s', '←', self.__window.on_left)
-        self.__left_menu.bind_key('d', '↓', self.__window.on_down)
-        self.__left_menu.bind_key('f', '→', self.__window.on_right)
-        self.__left_menu.bind_key('w', '← Word', self.__window.on_left_word)
-        self.__left_menu.bind_key('r', '→ Word', self.__window.on_right_word)
+        self.__left_menu.bind_key('e', '↑', self.__window.on_up,
+                                  tooltip=_('Move the cursor up'))
+        self.__left_menu.bind_key('s', '←', self.__window.on_left,
+                                  tooltip=_('Move the cursor left'))
+        self.__left_menu.bind_key('d', '↓', self.__window.on_down,
+                                  tooltip=_('Move the cursor down'))
+        self.__left_menu.bind_key('f', '→', self.__window.on_right,
+                                  tooltip=_('Move the cursor right'))
+        self.__left_menu.bind_key('w', '← Word', self.__window.on_left_word,
+                                  tooltip=_('Move the cursor left by a word'))
+        self.__left_menu.bind_key('r', '→ Word', self.__window.on_right_word,
+                                  tooltip=_('Move the cursor right by a word'))
 
-        self.__format_menu = Menu(Menu.Side.RIGHT)
-        self.__format_menu.show_all()
-        self.__stack.add(self.__format_menu)
-        self.__format_menu.bind_key('bracketright', _('Back'), self.__on_back)
-        self.__format_menu.bind_key('j', _('Language…'), self.__on_language)
-        self.__format_menu.bind_toggle_key('k', _('Use Spaces'),
-                                           self.__window.on_use_spaces)
-        self.__format_menu.bind_key('l', _('Tab Width'),
-                                    lambda b: print('“Tab Width” activated'))
+        self.__style_menu = Menu(Menu.Side.RIGHT)
+        self.__style_menu.show_all()
+        self.__stack.add(self.__style_menu)
+        self.__style_menu.bind_key('bracketright', _('Back'), self.__on_back,
+                                   tooltip=_('Show the previous menu'))
+        self.__style_menu.bind_key(
+            'j', _('Language…'), self.__on_language,
+            tooltip=_('Set the computer language to highlight syntax for'))
+        self.__style_menu.bind_toggle_key(
+            'k', _('Use Spaces'), self.__window.on_use_spaces,
+            tooltip=_('Whether to indent with spaces instead of tabs'))
+        self.__style_menu.bind_key('l', _('Tab Width'),
+                                   lambda b: print('“Tab Width” activated'))
 
         lang_scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN)
         self.__language_menu = Menu(Menu.Side.RIGHT,
                                     [[0, 0, 24, 3, lang_scroller]])
         self.__stack.add(self.__language_menu)
         self.__language_menu.bind_key('bracketright', _('Back'),
-                                      self.__on_back)
+                                      self.__on_back,
+                                      tooltip=_('Show the previous menu'))
         self.__language_list = LanguageList()
         lang_scroller.add(self.__language_list)
         self.__language_list.connect('selection-changed',
@@ -485,9 +505,9 @@ class MenuStack(Gtk.Overlay):
         self.__stack.props.visible_child = self.__history.pop()
         self.__menu_pinned = False
 
-    def __on_format(self, button):
+    def __on_style(self, button):
         self.__history.append(self.__stack.props.visible_child)
-        self.__stack.props.visible_child = self.__format_menu
+        self.__stack.props.visible_child = self.__style_menu
 
     def __on_language(self, button):
         self.__history.append(self.__stack.props.visible_child)

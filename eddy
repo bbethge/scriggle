@@ -20,10 +20,77 @@ import weakref
 
 import gi
 gi.require_version('Gdk', '3.0')
+gi.require_version('PangoCairo', '1.0')
 gi.require_version('Gtk', '3.0')
 gi.require_version('GtkSource', '3.0')
 gtk_minor_version = 14
-from gi.repository import GLib, GObject, Gio, Gdk, Pango, Gtk, GtkSource
+from gi.repository import GLib, GObject, Gio, Gdk, Pango, PangoCairo, Gtk
+from gi.repository import GtkSource
+
+
+class AutoSizeLabel(Gtk.Widget):
+    """
+    A label that chooses an appropriate font size.
+
+    Instead of requesting enough space to show its whole text, this
+    label tries to reduce its font size to be able to show its whole
+    text in the allocation it receives.
+    """
+    def __init__(self, markup='', **props):
+        super().__init__(**props)
+        # XXX: This should be done in the instance init function, but
+        # PyGObject doesn’t want anyone to override the instance init
+        # function except for Gtk.Template.
+        self.set_has_window(False)
+        self.markup = markup
+
+    @property
+    def markup(self):
+        return self.__markup
+    @markup.setter
+    def markup(self, markup):
+        self.__markup = markup
+        if markup:
+            layout = self.create_pango_layout(self.__markup)
+            _ink_rect, log_rect = layout.get_pixel_extents()
+            self.__preferred_width = log_rect.width
+        else:
+            self.__preferred_width = 0
+
+    def do_get_request_mode(self):
+        return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
+
+    def do_get_preferred_width(self):
+        return min(self.__preferred_width, 40), self.__preferred_width
+
+    def do_get_preferred_height_and_baseline_for_width(self, width):
+        layout = self.create_pango_layout(self.__markup)
+        _ink_rect, log_rect = layout.get_pixel_extents()
+        if layout.get_line_count() > 1:
+            baseline = log_rect.height * 2 // 3
+        else:
+            baseline = layout.get_baseline() // Pango.SCALE
+        return log_rect.height, log_rect.height, baseline, baseline
+
+    def do_draw(self, cr):
+        width = self.get_allocated_width()
+        height = self.get_allocated_height()
+        baseline = self.get_allocated_baseline()
+        layout = self.create_pango_layout('')
+        layout.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        layout.set_width(width * Pango.SCALE)
+        layout.set_height(height * Pango.SCALE)
+        for size in ('medium', 'small', 'x-small', 'xx-small'):
+            layout.set_markup(f'<span size="{size}">{self.__markup}</span>')
+            if not layout.is_ellipsized():
+                break
+        _ink_rect, rect = layout.get_pixel_extents()
+        layout_baseline = layout.get_baseline() // Pango.SCALE
+        if baseline == -1:
+            baseline = layout_baseline
+        cr.translate(rect.x, rect.y + baseline - layout_baseline)
+        PangoCairo.show_layout(cr, layout)
+        return True
 
 
 class MenuItemMixin:
@@ -40,18 +107,16 @@ class MenuItemMixin:
         self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(self.__grid)
 
-        self.__label = Gtk.Label(use_underline=True, hexpand=True,
-                                 halign=Gtk.Align.START)
-        self.__label.props.ellipsize = Pango.EllipsizeMode.END
+        self.__label = AutoSizeLabel(hexpand=True, halign=Gtk.Align.START,
+                                     valign=Gtk.Align.BASELINE)
         self.__grid.add(self.__label)
 
-        self.__keyval_label = Gtk.Label()
+        self.__keyval_label = Gtk.Label(valign=Gtk.Align.BASELINE)
         self.__grid.add(self.__keyval_label)
 
         self.__grid.show_all()
 
         self.keyval = None
-        self.label = None
 
     @property
     def keyval(self):
@@ -68,10 +133,10 @@ class MenuItemMixin:
 
     @property
     def label(self):
-        return self.__label.props.label
+        return self.__label.markup
     @label.setter
-    def label(self, label):
-        self.__label.props.label = label
+    def label(self, markup):
+        self.__label.markup = markup
 
 
 class MenuItem(MenuItemMixin, Gtk.Button):

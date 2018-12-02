@@ -994,8 +994,7 @@ class Application(Gtk.Application):
             self.open([file], '')
 
 
-
-if __name__ == '__main__':
+def main():
     from os.path import abspath, dirname, isdir, join
     import sys
     # This is the locale directory if we are not installed.
@@ -1006,7 +1005,7 @@ if __name__ == '__main__':
     gettext.textdomain('eddy')
     if '-h' in sys.argv or '--help' in sys.argv:
         print(__doc__.strip())
-        sys.exit(0)
+        return 0
     if Gtk.get_minor_version() < gtk_minor_version:
         dialog = Gtk.MessageDialog(
             None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
@@ -1014,5 +1013,10 @@ if __name__ == '__main__':
             _('Eddy requires GTK+ version 3.{} or later').format(
                 gtk_minor_version))
         dialog.run()
-        sys.exit(1)
-    sys.exit(Application().run(sys.argv))
+        return 1
+    return Application().run(sys.argv)
+
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main())

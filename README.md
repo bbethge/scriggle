@@ -20,7 +20,7 @@ Eddy uses Python 3 and GTK+ 3 (including the Python GObject Introspection bindin
 ## Running from the source directory
 You can try Eddy without installing it by running
 
-    python3 eddy/eddy.py
+    python3 -m eddy.eddy
 
 from the source code directory.
 

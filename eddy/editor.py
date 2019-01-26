@@ -132,7 +132,11 @@ class Editor(Gtk.ApplicationWindow):
     def on_use_spaces(self, use_spaces):
         self.__source_view.props.insert_spaces_instead_of_tabs = use_spaces
 
-    def on_new(self, _widget):
+    def on_tab_width(self):
+        # TODO: Turn Tab Width into a focus binding so we don’t need this
+        pass
+
+    def on_new(self):
         if self.props.application is not None:
             self.props.application.activate()
 
@@ -140,7 +144,7 @@ class Editor(Gtk.ApplicationWindow):
         self.on_close()
         return True
 
-    def on_close(self, _widget=None):
+    def on_close(self):
         if not self.__saved:
             DISCARD = 0
             SAVE = 1
@@ -175,10 +179,13 @@ class Editor(Gtk.ApplicationWindow):
             self.props.application.remove_window(self)
         self.destroy()
 
-    def on_open(self, _widget):
+    def on_open(self):
         self.props.application.show_open_dialog(self)
 
-    def on_save(self, _widget=None):
+    def on_find(self):
+        print('“Find” activated')
+
+    def on_save(self):
         if self.__file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
@@ -227,43 +234,43 @@ class Editor(Gtk.ApplicationWindow):
         self.__menu_stack.status_area.disconnect(cancel_handler)
         self.__menu_stack.status_area.hide_save_status()
 
-    def on_undo(self, _widget):
+    def on_undo(self):
         # TODO: Set sensitivity of the button depending on
         # self.buffer.can_undo.
         self.buffer.undo()
 
-    def on_cut(self, _widget):
+    def on_cut(self):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.cut_clipboard(clip, True)
 
-    def on_copy(self, _widget):
+    def on_copy(self):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.copy_clipboard(clip)
 
-    def on_paste(self, _widget):
+    def on_paste(self):
         clip = self.get_clipboard(Gdk.SELECTION_CLIPBOARD)
         self.buffer.paste_clipboard(clip, None, True)
 
-    def on_up(self, _widget):
+    def on_up(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.DISPLAY_LINES, -1, False)
 
-    def on_down(self, _widget):
+    def on_down(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.DISPLAY_LINES, 1, False)
 
-    def on_left(self, _widget):
+    def on_left(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.VISUAL_POSITIONS, -1, False)
 
-    def on_right(self, _widget):
+    def on_right(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.VISUAL_POSITIONS, 1, False)
 
-    def on_left_word(self, _widget):
+    def on_left_word(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.WORDS, -1, False)
 
-    def on_right_word(self, _widget):
+    def on_right_word(self):
         self.__source_view.emit('move-cursor',
                                 Gtk.MovementStep.WORDS, 1, False)

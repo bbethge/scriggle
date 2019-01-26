@@ -12,7 +12,7 @@ It’s still bare-bones, but you can:
  * Use syntax highlighting
 
 ## Requirements
-Eddy uses Python 3 and GTK+ 3 (including the Python GObject Introspection bindings), which are installed with most Linux distributions.  On Windows, see the [Python Releases for Windows][1] page and the [GTK+ installation instructions for Windows][2] (make sure to install the Python bindings).
+Eddy uses Python 3.7 and GTK+ 3 (including the Python GObject Introspection bindings).  On Linux, you probably have GTK+ 3, but you might have an older version of Python installed by default.  You can probably install Python 3.7 from you package manager alongside the default version.  On Windows, see the [Python Releases for Windows][1] page and the [GTK+ installation instructions for Windows][2] (make sure to install the Python bindings).
 
 [1]: https://www.python.org/downloads/windows/
 [2]: https://www.gtk.org/download/windows.php
@@ -20,14 +20,14 @@ Eddy uses Python 3 and GTK+ 3 (including the Python GObject Introspection bindin
 ## Running from the source directory
 You can try Eddy without installing it by running
 
-    python3 -m eddy.eddy
+    python3.7 -m eddy.eddy
 
 from the source code directory.
 
 ## Installation
 Once you have installed the requirements and checked out the code, you can install Eddy using [pip][3] (not from the [PyPI][4], though: you have to check out the git repository).  Use
 
-    pip3 install /path/to/eddy
+    python3.7 -m pip install /path/to/eddy
 
 On Linux (and probably MacOS), this will install to your home directory, so you don’t need to be superuser.  Afterward, you can run `eddy` from any directory and (on Linux) it will appear in your applications menu.
 

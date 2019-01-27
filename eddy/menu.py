@@ -303,14 +303,14 @@ class Menu(Gtk.Grid):
                     item.connect(
                         'toggled',
                         lambda button:
-                            getattr(self.__stack.window, binding.method)(
+                            getattr(self.__stack.editor, binding.method)(
                                 button.props.active))
                 else:
                     item = MenuItem(tooltip_markup=binding.tooltip)
                     item.connect(
                         'clicked',
                         lambda _button:
-                            getattr(self.__stack.window, binding.method)())
+                            getattr(self.__stack.editor, binding.method)())
                 item.label = binding.label
             elif isinstance(binding, SubmenuBinding):
                 submenu = binding.submenu_class(self.__stack)

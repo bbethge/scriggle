@@ -36,9 +36,8 @@ class Language(Menu):
             stack, override_widgets=[[0, 0, 24, 3, scroller]],
             focus_widget=self.__language_list, **props)
         scroller.add(self.__language_list)
-        self.__language_list.connect(
-            'selection-changed',
-            lambda _view: self.stack.on_language_changed(self.__language_list))
+        self.__language_list.connect('selection-changed',
+                                     self.__on_language_changed)
         self.__language_list.connect(
             'item-activated',
             lambda _view, path:
@@ -47,6 +46,14 @@ class Language(Menu):
     @property
     def language_list(self):
         return self.__language_list
+
+    def __on_language_changed(self, language_list):
+        iters = language_list.get_selected_items()
+        if iters:
+            iter_ = language_list.props.model.get_iter(iters[0])
+            (id_,) = language_list.props.model.get(iter_,
+                                                   language_list.COLUMN_ID)
+            self.stack.editor.on_language_changed(id_)
 
 
 class Style(Menu):

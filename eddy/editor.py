@@ -22,8 +22,6 @@ class Editor(Gtk.ApplicationWindow):
         
         self.__menu_stack = MenuStack(self)
         grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
-        self.__menu_stack.connect('language-changed',
-                                  self.__on_language_changed)
 
         scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN,
                                       expand=True)
@@ -122,7 +120,7 @@ class Editor(Gtk.ApplicationWindow):
         self.__menu_stack.status_area.set_cursor_position(
             location.get_line(), location.get_line_offset())
 
-    def __on_language_changed(self, _stack, language_id):
+    def on_language_changed(self, language_id):
         lang_man = GtkSource.LanguageManager.get_default()
         if language_id == 'plain':
             self.buffer.set_language(None)

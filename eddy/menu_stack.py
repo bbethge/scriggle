@@ -73,14 +73,15 @@ class StatusArea(Gtk.Grid):
 
 
 class MenuStack(Gtk.Overlay):
-    def __init__(self, window, **props):
+    def __init__(self, editor, **props):
         """
         Create a new MenuStack
 
         Create a new MenuStack, with a status area and all menus.
+        ‘editor’ is the Editor that contains this widget.
         """
         super().__init__(**props)
-        self.__window = window
+        self.__editor = editor
         self.__history = []
         self.__menu_pinned = False
 
@@ -103,7 +104,7 @@ class MenuStack(Gtk.Overlay):
         self.__stack.add(self.__left_menu)
 
     def go_back(self):
-        self.__unpin_menu(self)
+        self.__unpin_menu()
         self.__stack.props.visible_child = self.__history.pop()
 
     def __unpin_menu(self):
@@ -124,25 +125,13 @@ class MenuStack(Gtk.Overlay):
             self.__menu_pinned = True
             submenu.focus_widget.grab_focus()
 
-    def on_language_changed(self, language_list):
-        iters = language_list.get_selected_items()
-        if iters:
-            iter_ = language_list.props.model.get_iter(iters[0])
-            id_, = language_list.props.model.get(iter_,
-                                                 language_list.COLUMN_ID)
-            self.emit('language-changed', id_)
-
     def on_language_activated(self, language_list, path):
         # TODO: Provide an unpin_menu method and have the menu invoke it?
         self.show_status_area()
 
-    @GObject.Signal(arg_types=(str,))
-    def language_changed(self, language_id):
-        pass
-
     @property
-    def window(self):
-        return self.__window
+    def editor(self):
+        return self.__editor
 
     @property
     def status_area(self):

@@ -1,10 +1,10 @@
 """
 Usage:
-$ eddy [-h|--help] [file...]
+$ scriggle [-h|--help] [file...]
 
 --help  Show this help
 
-Eddy is a graphical text editor based on the idea of keyboard menus:
+Scriggle is a graphical text editor based on the idea of keyboard menus:
 every (non-application-wide) menu is an image of half of the keyboard
 with actions labeling each key.  A menu is shown by holding down a Ctrl
 key, and a menu item is activated by pressing the corresponding key.
@@ -46,7 +46,7 @@ def home_substitute(filename):
 
 class Application(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id='com.example.Eddy',
+        super().__init__(application_id='com.example.Scriggle',
                          flags=Gio.ApplicationFlags.HANDLES_OPEN)
         self.__unnamed_window_number = 1
 
@@ -120,8 +120,8 @@ def main():
     localedir = abspath(join(dirname(sys.argv[0]), 'locale'))
     if not isdir(localedir):
         localedir = None
-    gettext.bindtextdomain('eddy', localedir)
-    gettext.textdomain('eddy')
+    gettext.bindtextdomain('scriggle', localedir)
+    gettext.textdomain('scriggle')
     if '-h' in sys.argv or '--help' in sys.argv:
         print(__doc__.strip())
         return 0
@@ -129,7 +129,7 @@ def main():
         dialog = Gtk.MessageDialog(
             None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
             Gtk.ButtonsType.CLOSE,
-            _('Eddy requires GTK+ version 3.{} or later').format(
+            _('Scriggle requires GTK+ version 3.{} or later').format(
                 gtk_minor_version))
         dialog.run()
         return 1

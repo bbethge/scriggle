@@ -1,12 +1,11 @@
 [Desktop Entry]
 Version=1.1
 Type=Application
-Name=Eddy
+Name=Scriggle
 GenericName=Text Editor
 Comment=Keyboard-only graphical text editor
 Categories=Utility;TextEditor;
 MimeType=text/plain;
-Icon=eddy
+Icon=scriggle
 DBusActivatable=true
-Exec=eddy
-Name[en_US]=eddy.desktop
+Exec=scriggle

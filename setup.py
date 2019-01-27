@@ -3,14 +3,14 @@ from setuptools import setup
 with open('README.md', 'r') as readme:
     long_description = readme.read()
 
-setup(name='Eddy',
+setup(name='Scriggle',
       version='0.1',
       author='Ben Bethge',
       author_email='bethge931@gmail.com',
       description='Keyboard-only graphical text editor',
       long_description=long_description,
       long_description_content_type='text/markdown',
-      url='https://github.com/bbethge/eddy/',
+      url='https://github.com/bbethge/scriggle/',
       license='GPLv3+',
       classifiers=['Development Status :: 3 - Alpha',
                    'Environment :: MacOS X',
@@ -26,7 +26,7 @@ setup(name='Eddy',
                    'Programming Language :: Python :: 3.7',
                    'Topic :: Text Editors'],
       zip_safe=False,
-      packages=['eddy'],
-      entry_points={'gui_scripts': ['eddy = eddy.eddy:main']},
-      data_files=[('share/icons/hicolor/scalable/apps', ['eddy.svg']),
-                  ('share/applications', ['eddy.desktop'])])
+      packages=['scriggle'],
+      entry_points={'gui_scripts': ['scriggle = scriggle.scriggle:main']},
+      data_files=[('share/icons/hicolor/scalable/apps', ['scriggle.svg']),
+                  ('share/applications', ['scriggle.desktop'])])

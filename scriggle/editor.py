@@ -12,7 +12,7 @@ class Editor(Gtk.ApplicationWindow):
 
     def __init__(self, file=None, **props):
         super().__init__(**dict(default_width=640, default_height=480,
-                                icon_name='eddy', **props))
+                                icon_name='scriggle', **props))
         self.__file = file
         self.__saved = True
         self.__close_after_save = False

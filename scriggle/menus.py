@@ -89,11 +89,11 @@ class LanguageList(Gtk.IconView):
     COLUMN_TEXT = 1
 
     def __init__(self, **props):
-        super().__init__(**dict(text_column=self.COLUMN_TEXT, item_padding=0,
-                                item_orientation=Gtk.Orientation.HORIZONTAL,
-                                row_spacing=0, activate_on_single_click=True,
-                                # TODO: Remove hard-coded size?
-                                item_width=144, **props))
+        super().__init__(text_column=self.COLUMN_TEXT, item_padding=0,
+                         item_orientation=Gtk.Orientation.HORIZONTAL,
+                         row_spacing=0, activate_on_single_click=True,
+                         # TODO: Remove hard-coded size?
+                         item_width=144, **props)
         model = Gtk.ListStore(str, str)
         model.insert(-1, ['plain', _('Plain')])
         lang_man = GtkSource.LanguageManager.get_default()

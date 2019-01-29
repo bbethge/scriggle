@@ -10,8 +10,7 @@ from . import menus
 
 class StatusArea(Gtk.Grid):
     def __init__(self, **props):
-        super().__init__(**dict(orientation=Gtk.Orientation.HORIZONTAL,
-                                **props))
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, **props)
         self.__save_status = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL,
                                       no_show_all=True)
         self.add(self.__save_status)

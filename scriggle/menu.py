@@ -79,7 +79,7 @@ class MenuItemMixin:
     key.  It goes inside a Menu.
     """
     def __init__(self, **props):
-        super().__init__(**dict(focus_on_click=False, **props))
+        super().__init__(focus_on_click=False, **props)
 
         self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(self.__grid)
@@ -251,8 +251,8 @@ class Menu(Gtk.Grid):
 
         ‘props’ contains GObject properties to be set.
         """
-        super().__init__(**dict(row_homogeneous=True, column_homogeneous=True,
-                                hexpand=True, **props))
+        super().__init__(row_homogeneous=True, column_homogeneous=True,
+                         hexpand=True, **props)
         self.__focus_widget = focus_widget
         self.__stack = stack
         self.__submenus = []

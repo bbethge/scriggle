@@ -29,4 +29,7 @@ setup(name='Scriggle',
       packages=['scriggle'],
       entry_points={'gui_scripts': ['scriggle = scriggle.scriggle:main']},
       data_files=[('share/icons/hicolor/scalable/apps', ['scriggle.svg']),
+                  *[(f'share/icons/hicolor/{s}x{s}/apps',
+                     [f'icons/{s}x{s}/scriggle.png'])
+                    for s in [16, 22, 24, 48]],
                   ('share/applications', ['scriggle.desktop'])])

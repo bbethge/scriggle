@@ -17,6 +17,10 @@ Scriggle uses Python 3.7 and GTK+ 3 (including the Python GObject Introspection 
 [1]: https://www.python.org/downloads/windows/
 [2]: https://www.gtk.org/download/windows.php
 
+If you modify the icon, you will need [Inkscape][5] to rebuild the PNG files using `build_icons.py`.
+
+[5]: https://inkscape.org/
+
 ## Running from the source directory
 You can try Scriggle without installing it by running
 

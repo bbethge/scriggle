@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from gettext import gettext as _
 
 import gi
@@ -24,6 +23,7 @@ class AutoSizeLabel(Gtk.Widget):
     @property
     def markup(self):
         return self.__markup
+
     @markup.setter
     def markup(self, markup):
         self.__markup = markup
@@ -98,6 +98,7 @@ class MenuItemMixin:
     @property
     def keyval(self):
         return self.__keyval
+
     @keyval.setter
     def keyval(self, keyval):
         if keyval is not None:
@@ -111,6 +112,7 @@ class MenuItemMixin:
     @property
     def label(self):
         return self.__label.markup
+
     @label.setter
     def label(self, markup):
         self.__label.markup = markup
@@ -138,53 +140,6 @@ class ToggleMenuItem(MenuItemMixin, Gtk.ToggleButton):
             self.props.active = not self.props.active
 
 
-@dataclass
-class Binding:
-    """
-    Represents an ordinary or toggle key binding.
-
-    This is used when constructing Menu._bindings to represent a binding
-    to an ordinary command (toggle=False) or toggle control
-    (toggle=True).  ‘label’ and ‘tooltip’ are used to construct the
-    button.  ‘method’ is the name of the method to be invoked on the
-    stack that owns the menu.  If toggle=False, the method is invoked
-    with no arguments; if toggle=True, the method receives a single
-    argument, the state of the toggle.
-    """
-    label: str
-    method: str
-    tooltip: str = None
-    toggle: bool = False
-
-
-@dataclass
-class SubmenuBinding:
-    """
-    Represents a submenu binding.
-
-    This is used when constructing Menu._bindings to represent a binding
-    that opens a submenu.  ‘label’ and ‘tooltip’ are used to construct
-    the button, submenu_class gives the Menu subclass that will be
-    instantiated (with the menu stack as the only argument) to create
-    the submenu, and ‘attr’ gives the attribute name used to store a
-    reference to the submenu on the menu being created.
-    """
-    label: str
-    submenu_class: type
-    attr: str
-    tooltip: str = None
-
-
-class BackBinding():
-    """
-    Represents a back button binding.
-
-    This is used when constructing Menu._bindings to represent a binding
-    that goes back to the parent menu.
-    """
-    __slots__ = ()
-
-
 class Menu(Gtk.Grid):
     """
     A menu using a keyboard-like layout.
@@ -193,9 +148,6 @@ class Menu(Gtk.Grid):
     half of the keyboard.  This will be shown by holding down the Ctrl
     key on the opposite side, and MenuItems can be activated by
     pressing the corresponding key.
-
-    This is an abstract class.  All menus must be an instance of a
-    Menu subclass.  See Menu._side and Menu._bindings.
     """
     class Side:
         LEFT = 0
@@ -213,19 +165,7 @@ class Menu(Gtk.Grid):
                   ['h', 'j', 'k', 'l', 'semicolon', 'apostrophe'],
                   ['n', 'm', 'comma', 'period', 'slash']]))]
 
-    _side = NotImplemented
-    """Which side of the keyboard to use.  Must be overriden by subclasses."""
-
-    _bindings = NotImplemented
-    """
-    Dictionary describing key bindings for Menu subclasses.
-
-    Menu subclasses must override this attribute.  It is a dictionary
-    having keyval names as keys and instances of Binding,
-    SubmenuBinding, or BackBinding as values.
-    """
-
-    def __init__(self, stack, override_widgets=(), focus_widget=None, **props):
+    def __init__(self, stack, side, **props):
         """
         Create a new menu.
 
@@ -236,104 +176,157 @@ class Menu(Gtk.Grid):
         call methods on this object to notify it when commands are
         invoked.
 
-        override_widgets is a sequence of specifications for widgets
-        that will replace some of the buttons.  Each specification is a
-        sequence of five things: x, y, width, and height of the region
-        to be used, and the widget itself.  The region is given in grid
-        coördinates: each key has a width of four, the first row starts
-        at column 0, the second at column 1, and the third at column 3.
-
-        focus_widget is one of the widgets in override_widgets that will
-        be focused when the menu pops up, taking focus from the source
-        view.  This implies that the menu will be pinned (prevented from
-        disappearing when the Ctrl key is released) so that the user can
-        type into it with both hands.
-
         ‘props’ contains GObject properties to be set.
+
+        Subclasses will probably want to call add_unused_keys at the end
+        of their constructor.
         """
         super().__init__(row_homogeneous=True, column_homogeneous=True,
                          hexpand=True, **props)
-        self.__focus_widget = focus_widget
         self.__stack = stack
-        self.__submenus = []
+        self.__side = side
+        self.__submenus = set()
+        """
+        The set of this menu’s submenus.
+
+        This is used to add the submenus to the stack *after* this menu
+        has been added to the stack.
+        """
         self.__items = {}
-        for row, row_contents in enumerate(self.__keyvals[self._side]):
-            for column, keyval in enumerate(row_contents):
-                grid_col = self.__key_coörds_to_grid_col(row, column)
-                check = self.__check_for_overlap(row, grid_col,
-                                                 override_widgets)
-                if check is None:
-                    self.__install_item(keyval, row, grid_col)
-                elif Gdk.keyval_name(keyval) in self._bindings:
-                    raise ValueError(
-                        f'Override widget at ({check[0]}, {check[1]}) '
-                        f'overlaps bound key at ({row}, {grid_col}).')
-        for x, y, width, height, widget in override_widgets:
-            self.attach(widget, x, y, width, height)
+        """A dictionary mapping keyvals to the MenuItems they are bound to."""
+        self.focus_widget = None
+        """The widget that will receive focus when the menu is shown."""
+        self.__extra_widgets = set()
+        """
+        The set of extra (non-key) widgets added to this Menu.
+
+        This is a set of tuples with the format (x, y, width, height, widget).
+        """
         spacer = Gtk.Label()
         spacer.show()
-        if self._side == self.Side.LEFT:
+        if self.__side == self.Side.LEFT:
             self.attach(spacer, 23, 2, 9, 1)
         else:
             self.attach(spacer, -4, 0, 4, 1)
 
-    def __check_for_overlap(self, row, grid_col, override_widgets):
-        """
-        Check whether a given key overlaps an override widget.
+    def bind_key_to_action(self, keyval_name, label, method_name,
+                           tooltip=None):
+        item = MenuItem()
+        item.connect(
+            'clicked',
+            lambda button: getattr(self.__stack.editor, method_name)())
+        self.__install_item(item, keyval_name, label, tooltip)
 
-        If the key at grid coördinates (row, grid_col) overlaps a widget
-        in override_widgets, return the grid coördinates of that widget.
-        Otherwise, return None.
-        """
-        for x, y, width, height, _widget in override_widgets:
-            if x - 3 <= grid_col < x + width and y <= row < y + height:
-                # Key is inside an override widget
-                return x, y
-        return None
+    def bind_key_to_toggle(self, keyval_name, label, method_name,
+                           tooltip=None):
+        item = ToggleMenuItem()
+        item.connect(
+            'toggled',
+            lambda button:
+                getattr(self.__stack.editor, method_name)(
+                    button.props.active))
+        self.__install_item(item, keyval_name, label, tooltip)
 
-    def __install_item(self, keyval, row, grid_col):
-        keyval_name = Gdk.keyval_name(keyval)
-        if keyval_name not in self._bindings:
-            item = MenuItem(sensitive=False)
-        else:
-            binding = self._bindings[keyval_name]
-            if isinstance(binding, Binding):
-                if binding.toggle:
-                    item = ToggleMenuItem(tooltip_markup=binding.tooltip)
-                    item.connect(
-                        'toggled',
-                        lambda button:
-                            getattr(self.__stack.editor, binding.method)(
-                                button.props.active))
-                else:
-                    item = MenuItem(tooltip_markup=binding.tooltip)
-                    item.connect(
-                        'clicked',
-                        lambda _button:
-                            getattr(self.__stack.editor, binding.method)())
-                item.label = binding.label
-            elif isinstance(binding, SubmenuBinding):
-                submenu = binding.submenu_class(self.__stack)
-                setattr(self, binding.attr, submenu)
-                self.__submenus.append(submenu)
-                submenu.show_all()
-                item = MenuItem(tooltip_markup=binding.tooltip)
-                item.connect(
-                    'clicked',
-                    lambda button:
-                        self.__stack.show_submenu(getattr(self, binding.attr)))
-                item.label = binding.label
-            elif isinstance(binding, BackBinding):
-                item = MenuItem(
-                    tooltip_markup=_('Go back to the previous menu'))
-                item.connect('clicked', lambda button: self.__stack.go_back())
-                item.label = _('Back')
-            else:
-                assert False
+    def bind_key_to_submenu(self, keyval_name, label, submenu, tooltip=None):
+        self.__submenus.add(submenu)
+        submenu.show_all()
+        item = MenuItem()
+        item.connect(
+            'clicked', lambda button: self.__stack.show_submenu(submenu))
+        self.__install_item(item, keyval_name, label, tooltip)
+
+    def bind_key_to_back_button(self, keyval_name):
+        item = MenuItem()
+        item.connect('clicked', lambda button: self.__stack.go_back())
+        self.__install_item(item, keyval_name, _('Back'),
+                            _('Go back to the previous menu'))
+
+    def __install_item(self, item, keyval_name, label, tooltip):
+        keyval = Gdk.keyval_from_name(keyval_name)
         item.keyval = keyval
+        item.label = label
+        if tooltip is not None:
+            item.props.tooltip_markup = tooltip
         item.show()
+        column, row = self.__keyval_to_coörds(keyval)
+        grid_col = self.__key_coörds_to_grid_col(row, column)
+        self.__check_key_for_overlap(row, grid_col)
         self.attach(item, grid_col, row, 4, 1)
         self.__items[keyval] = item
+
+    def __keyval_to_coörds(self, keyval):
+        for row, row_contents in enumerate(self.__keyvals[self.__side]):
+            for column, found_keyval in enumerate(row_contents):
+                if found_keyval == keyval:
+                    return column, row
+        raise ValueError(f'Keyval {keyval} ({Gdk.keyval_name(keyval)}) '
+                          'not found')
+
+    def add_extra_widget(self, widget, x, y, width, height):
+        self.__check_widget_for_overlap(x, y, width, height)
+        self.attach(widget, x, y, width, height)
+        self.__extra_widgets.add((x, y, width, height, widget))
+
+    def add_unused_keys(self):
+        """
+        Add insensitive menu items for unbound keys.
+
+        This must be called after all calls to bind_key_* and
+        add_extra_widget and before using the menu.  Subclasses
+        probably want to call this at the end of their constructor,
+        although this makes it hard to derive further sub-subclasses.
+        """
+        for row, row_contents in enumerate(self.__keyvals[self.__side]):
+            for column, keyval in enumerate(row_contents):
+                grid_col = self.__key_coörds_to_grid_col(row, column)
+                if (keyval not in self.__items
+                        and not self.__key_overlaps_extra_widget(row,
+                                                                 grid_col)):
+                    item = MenuItem(sensitive=False)
+                    item.keyval = keyval
+                    self.attach(item, grid_col, row, 4, 1)
+
+    def __key_overlaps_extra_widget(self, row, grid_col):
+        """
+        Check whether a given key would overlap an existing extra widget.
+
+        If the key at grid coördinates (row, grid_col) overlaps a widget
+        in self.__extra_widgets, return True.  Otherwise, False.
+        """
+        for x, y, width, height, widget in self.__extra_widgets:
+            if x - 3 <= grid_col < x + width and y <= row < y + height:
+                # Key is inside an extra widget
+                return True
+        else:
+            return False
+
+    def __check_key_for_overlap(self, row, grid_col):
+        """
+        Check whether a given key would overlap an existing extra widget.
+
+        If the key at grid coördinates (row, grid_col) overlaps a widget
+        in self.__extra_widgets, raise a ValueError.
+        """
+        if self.__key_overlaps_extra_widget(row, grid_col):
+            raise ValueError(f'Key at ({grid_col}, {row}) would overlap '
+                              'an extra widget')
+
+    def __check_widget_for_overlap(self, x, y, width, height):
+        """
+        Check whether a given rectangle would overlap a bound key.
+
+        If the rectangle given by (x, y, width, height) overlaps one of
+        the bound keys, raise a ValueError.
+        """
+        for row, row_contents in enumerate(self.__keyvals[self.__side]):
+            for column, keyval in enumerate(row_contents):
+                grid_col = self.__key_coörds_to_grid_col(row, column)
+                if (keyval in self.__items
+                        and x - 3 <= grid_col < x + width
+                        and y <= row < y + height):
+                    raise ValueError(f'Widget at ({x}, {y}) '
+                                     f'({width}×{height}) would overlap key '
+                                     f'{Gdk.keyval_name(keyval)}')
 
     def do_parent_set(self, old_parent):
         if old_parent is None:
@@ -342,15 +335,11 @@ class Menu(Gtk.Grid):
 
     @property
     def side(self):
-        return self._side
+        return self.__side
 
     @property
     def stack(self):
         return self.__stack
-
-    @property
-    def focus_widget(self):
-        return self.__focus_widget
 
     @staticmethod
     def __key_coörds_to_grid_col(row, column):

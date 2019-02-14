@@ -3,45 +3,73 @@ from gettext import gettext as _
 import gi
 from gi.repository import GLib, Gdk, Gtk, GtkSource
 
-from .menu import Menu, Binding, SubmenuBinding, BackBinding
+from .menu import Menu
 
 
 class Left(Menu):
-    _side = Menu.Side.LEFT
+    def __init__(self, stack):
+        super().__init__(stack, Menu.Side.LEFT)
+        self.bind_key_to_action('z', _('Undo'), 'on_undo')
+        self.bind_key_to_action('x', _('Cut'), 'on_cut')
+        self.bind_key_to_action('c', _('Copy'), 'on_copy')
+        self.bind_key_to_action('v', _('Paste'), 'on_paste')
+        self.bind_key_to_action('e', '↑', 'on_up', _('Move the cursor up'))
+        self.bind_key_to_action('s', '←', 'on_left', _('Move the cursor left'))
+        self.bind_key_to_action('d', '↓', 'on_down', _('Move the cursor down'))
+        self.bind_key_to_action('f', '→', 'on_right',
+                                _('Move the cursor right'))
+        self.bind_key_to_action('w', _('← Word'), 'on_left_word',
+                                _('Move the cursor left by a word'))
+        self.bind_key_to_action('r', _('→ Word'), 'on_right_word',
+                                _('Move the cursor right by a word'))
+        self.add_unused_keys()
 
-    _bindings = {
-        'z': Binding(_('Undo'), 'on_undo'),
-        'x': Binding(_('Cut'), 'on_cut'),
-        'c': Binding(_('Copy'), 'on_copy'),
-        'v': Binding(_('Paste'), 'on_paste'),
-        'e': Binding('↑', 'on_up', _('Move the cursor up')),
-        's': Binding('←', 'on_left', _('Move the cursor left')),
-        'd': Binding('↓', 'on_down', _('Move the cursor down')),
-        'f': Binding('→', 'on_right', _('Move the cursor right')),
-        'w': Binding(_('← Word'), 'on_left_word',
-                     _('Move the cursor left by a word')),
-        'r': Binding(_('→ Word'), 'on_right_word',
-                     _('Move the cursor right by a word'))}
+
+class Right(Menu):
+    def __init__(self, stack):
+        super().__init__(stack, Menu.Side.RIGHT)
+        self.bind_key_to_submenu('y', _('Style…'), Style(stack),
+                                 _('Options related to code style'))
+        self.bind_key_to_action('n', _('New'), 'on_new',
+                                _('Create a new document'))
+        self.bind_key_to_action('i', _('Close'), 'on_close',
+                                _('Close the current document'))
+        self.bind_key_to_action('o', _('Open…'), 'on_open')
+        self.bind_key_to_action('j', _('Find'), 'on_find')
+        self.bind_key_to_action('k', _('Save'), 'on_save')
+        self.add_unused_keys()
+
+
+class Style(Menu):
+    def __init__(self, stack):
+        super().__init__(stack, Menu.Side.RIGHT)
+        self.bind_key_to_back_button('bracketright')
+        self.bind_key_to_submenu(
+            'j', _('Language…'), Language(stack),
+            _('Set the computer language to highlight syntax for')),
+        self.bind_key_to_toggle(
+            'k', _('Use Spaces'), 'on_use_spaces',
+            _('Whether to indent with spaces instead of tabs'))
+        self.bind_key_to_action('l', _('Tab Width'), 'on_tab_width')
+        self.add_unused_keys()
 
 
 class Language(Menu):
-    _side = Menu.Side.RIGHT
-
-    _bindings = {'bracketright': BackBinding()}
-
-    def __init__(self, stack, **props):
+    def __init__(self, stack):
+        super().__init__(stack, Menu.Side.RIGHT)
+        self.bind_key_to_back_button('bracketright')
         scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN)
         self.__language_list = LanguageList()
-        super().__init__(
-            stack, override_widgets=[[0, 0, 24, 3, scroller]],
-            focus_widget=self.__language_list, **props)
         scroller.add(self.__language_list)
+        self.add_extra_widget(scroller, 0, 0, 24, 3)
+        self.focus_widget = self.__language_list
         self.__language_list.connect('selection-changed',
                                      self.__on_language_changed)
         self.__language_list.connect(
             'item-activated',
             lambda _view, path:
                 self.stack.on_language_activated(self.__language_list, path))
+        self.add_unused_keys()
 
     @property
     def language_list(self):
@@ -54,34 +82,6 @@ class Language(Menu):
             (id_,) = language_list.props.model.get(iter_,
                                                    language_list.COLUMN_ID)
             self.stack.editor.on_language_changed(id_)
-
-
-class Style(Menu):
-    _side = Menu.Side.RIGHT
-
-    _bindings = {
-        'bracketright': BackBinding(),
-        'j': SubmenuBinding(
-            _('Language…'), Language, 'language_menu',
-            _('Set the computer language to highlight syntax for')),
-        'k': Binding(
-            _('Use Spaces'), 'on_use_spaces',
-            _('Whether to indent with spaces instead of tabs'),
-            toggle=True),
-        'l': Binding(_('Tab Width'), 'on_tab_width')}
-
-
-class Right(Menu):
-    _side = Menu.Side.RIGHT
-
-    _bindings = {
-        'y': SubmenuBinding(_('Style…'), Style, 'style_menu',
-                            _('Options related to code style')),
-        'n': Binding(_('New'), 'on_new', _('Create a new document')),
-        'i': Binding(_('Close'), 'on_close', _('Close the current document')),
-        'o': Binding(_('Open…'), 'on_open'),
-        'j': Binding(_('Find'), 'on_find'),
-        'k': Binding(_('Save'), 'on_save')}
 
 
 class LanguageList(Gtk.IconView):

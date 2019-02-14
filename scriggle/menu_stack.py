@@ -87,6 +87,7 @@ class MenuStack(Gtk.Overlay):
         self.__editor = editor
         self.__history = []
         self.__menu_pinned = False
+        self.__previous_focus = None
 
         self.__stack = Gtk.Stack(
             transition_type=Gtk.StackTransitionType.OVER_UP_DOWN
@@ -108,13 +109,18 @@ class MenuStack(Gtk.Overlay):
         self.__stack.add(self.__left_menu)
 
     def go_back(self):
-        self.__unpin_menu()
+        self.unpin_menu()
         self.__stack.props.visible_child = self.__history.pop()
 
-    def __unpin_menu(self):
-        if hasattr(self, '_MenuStack__previous_focus'):
+    def pin_menu(self, focus_widget):
+        self.__previous_focus = self.get_toplevel().get_focus()
+        self.__menu_pinned = True
+        focus_widget.grab_focus()
+
+    def unpin_menu(self):
+        if self.__previous_focus is not None:
             self.__previous_focus.grab_focus()
-            del self.__previous_focus
+            self.__previous_focus = None
         self.__menu_pinned = False
 
     def add_submenu(self, submenu):
@@ -122,12 +128,9 @@ class MenuStack(Gtk.Overlay):
 
     def show_submenu(self, submenu):
         if submenu.focus_widget is not None:
-            self.__previous_focus = self.get_toplevel().get_focus()
+            self.pin_menu(submenu.focus_widget)
         self.__history.append(self.__stack.props.visible_child)
         self.__stack.props.visible_child = submenu
-        if submenu.focus_widget is not None:
-            self.__menu_pinned = True
-            submenu.focus_widget.grab_focus()
 
     def on_language_activated(self, language_list, path):
         # TODO: Provide an unpin_menu method and have the menu invoke it?
@@ -190,5 +193,5 @@ class MenuStack(Gtk.Overlay):
             self.remove(self.__position_label)
             self.__status_area.pop_in_cursor_position_label()
             self.__position_label = None
-        self.__unpin_menu()
+        self.unpin_menu()
         self.__stack.props.visible_child = self.__status_area

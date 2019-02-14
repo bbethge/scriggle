@@ -60,7 +60,22 @@ class Style(Menu):
             'k', _('Use Spaces'), 'on_use_spaces',
             _('Whether to indent with spaces instead of tabs')
         )
-        self.bind_key_to_action('l', _('Tab Width'), 'on_tab_width')
+        tab_width_selector = Gtk.SpinButton(
+            adjustment=Gtk.Adjustment(8, 2, 8, 1, 2, 0)
+        )
+        tab_width_selector.connect(
+            'value-changed',
+            lambda selector:
+                self.stack.editor.on_tab_width_changed(selector.props.value)
+        )
+        # XXX: The menu was pinned by the MenuStack when it showed the
+        # style menu and found it had a focus widget.  This seems too
+        # complicated.
+        tab_width_selector.connect(
+            'activate', lambda selector: self.stack.show_status_area()
+        )
+        self.add_extra_widget(tab_width_selector, 8, 0, 4, 1)
+        self.bind_key_to_widget('u', _('Tab Width:'), tab_width_selector)
         self.add_unused_keys()
 
 

@@ -265,6 +265,12 @@ class Menu(Gtk.Grid):
             item, keyval_name, _('Back'), _('Go back to the previous menu')
         )
 
+    def bind_key_to_widget(self, keyval_name, label, widget, tooltip=None):
+        item = MenuItem()
+        # XXX: Will this mess up the focus managed by the MenuStack?
+        item.connect('clicked', lambda button: self.__stack.pin_menu(widget))
+        self.__install_item(item, keyval_name, label, tooltip)
+
     def __install_item(self, item, keyval_name, label, tooltip):
         keyval = Gdk.keyval_from_name(keyval_name)
         item.keyval = keyval

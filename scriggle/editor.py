@@ -147,9 +147,8 @@ class Editor(Gtk.ApplicationWindow):
     def on_use_spaces(self, use_spaces):
         self.__source_view.props.insert_spaces_instead_of_tabs = use_spaces
 
-    def on_tab_width(self):
-        # TODO: Turn Tab Width into a focus binding so we don’t need this
-        pass
+    def on_tab_width_changed(self, tab_width):
+        self.__source_view.props.tab_width = tab_width
 
     def on_new(self):
         if self.props.application is not None:

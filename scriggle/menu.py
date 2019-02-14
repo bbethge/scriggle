@@ -84,8 +84,9 @@ class MenuItemMixin:
         self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
         self.add(self.__grid)
 
-        self.__label = AutoSizeLabel(hexpand=True, halign=Gtk.Align.START,
-                                     valign=Gtk.Align.BASELINE)
+        self.__label = AutoSizeLabel(
+            hexpand=True, halign=Gtk.Align.START, valign=Gtk.Align.BASELINE
+        )
         self.__grid.add(self.__label)
 
         self.__keyval_label = Gtk.Label(valign=Gtk.Align.BASELINE)
@@ -104,7 +105,8 @@ class MenuItemMixin:
         if keyval is not None:
             kvs = chr(Gdk.keyval_to_unicode(keyval))
             self.__keyval_label.set_markup(
-                f'<b> {GLib.markup_escape_text(kvs)}</b>')
+                f'<b> {GLib.markup_escape_text(kvs)}</b>'
+            )
         else:
             self.__keyval_label.set_markup('')
         self.__keyval = keyval
@@ -155,15 +157,28 @@ class Menu(Gtk.Grid):
 
     __keyvals = [
         # Side.LEFT
-        list(map(lambda kns: list(map(Gdk.keyval_from_name, kns)),
-                 [['q', 'w', 'e', 'r', 't'],
-                  ['a', 's', 'd', 'f', 'g'],
-                  ['z', 'x', 'c', 'v', 'b']])),
+        list(
+            map(
+                lambda kns: list(map(Gdk.keyval_from_name, kns)),
+                [
+                    ['q', 'w', 'e', 'r', 't'],
+                    ['a', 's', 'd', 'f', 'g'],
+                    ['z', 'x', 'c', 'v', 'b'],
+                ]
+            )
+        ),
         # Side.RIGHT
-        list(map(lambda kns: list(map(Gdk.keyval_from_name, kns)),
-                 [['y', 'u', 'i', 'o', 'p', 'bracketleft', 'bracketright'],
-                  ['h', 'j', 'k', 'l', 'semicolon', 'apostrophe'],
-                  ['n', 'm', 'comma', 'period', 'slash']]))]
+        list(
+            map(
+                lambda kns: list(map(Gdk.keyval_from_name, kns)),
+                [
+                    ['y', 'u', 'i', 'o', 'p', 'bracketleft', 'bracketright'],
+                    ['h', 'j', 'k', 'l', 'semicolon', 'apostrophe'],
+                    ['n', 'm', 'comma', 'period', 'slash'],
+                ]
+            )
+        )
+    ]
 
     def __init__(self, stack, side, **props):
         """
@@ -181,8 +196,10 @@ class Menu(Gtk.Grid):
         Subclasses will probably want to call add_unused_keys at the end
         of their constructor.
         """
-        super().__init__(row_homogeneous=True, column_homogeneous=True,
-                         hexpand=True, **props)
+        super().__init__(
+            row_homogeneous=True, column_homogeneous=True, hexpand=True,
+            **props
+        )
         self.__stack = stack
         self.__side = side
         self.__submenus = set()
@@ -209,22 +226,27 @@ class Menu(Gtk.Grid):
         else:
             self.attach(spacer, -4, 0, 4, 1)
 
-    def bind_key_to_action(self, keyval_name, label, method_name,
-                           tooltip=None):
+    def bind_key_to_action(
+            self, keyval_name, label, method_name, tooltip=None
+    ):
         item = MenuItem()
         item.connect(
             'clicked',
-            lambda button: getattr(self.__stack.editor, method_name)())
+            lambda button: getattr(self.__stack.editor, method_name)()
+        )
         self.__install_item(item, keyval_name, label, tooltip)
 
-    def bind_key_to_toggle(self, keyval_name, label, method_name,
-                           tooltip=None):
+    def bind_key_to_toggle(
+            self, keyval_name, label, method_name, tooltip=None
+    ):
         item = ToggleMenuItem()
         item.connect(
             'toggled',
             lambda button:
                 getattr(self.__stack.editor, method_name)(
-                    button.props.active))
+                    button.props.active
+                )
+        )
         self.__install_item(item, keyval_name, label, tooltip)
 
     def bind_key_to_submenu(self, keyval_name, label, submenu, tooltip=None):
@@ -232,14 +254,16 @@ class Menu(Gtk.Grid):
         submenu.show_all()
         item = MenuItem()
         item.connect(
-            'clicked', lambda button: self.__stack.show_submenu(submenu))
+            'clicked', lambda button: self.__stack.show_submenu(submenu)
+        )
         self.__install_item(item, keyval_name, label, tooltip)
 
     def bind_key_to_back_button(self, keyval_name):
         item = MenuItem()
         item.connect('clicked', lambda button: self.__stack.go_back())
-        self.__install_item(item, keyval_name, _('Back'),
-                            _('Go back to the previous menu'))
+        self.__install_item(
+            item, keyval_name, _('Back'), _('Go back to the previous menu')
+        )
 
     def __install_item(self, item, keyval_name, label, tooltip):
         keyval = Gdk.keyval_from_name(keyval_name)
@@ -259,8 +283,9 @@ class Menu(Gtk.Grid):
             for column, found_keyval in enumerate(row_contents):
                 if found_keyval == keyval:
                     return column, row
-        raise ValueError(f'Keyval {keyval} ({Gdk.keyval_name(keyval)}) '
-                          'not found')
+        raise ValueError(
+            f'Keyval {keyval} ({Gdk.keyval_name(keyval)}) not found'
+        )
 
     def add_extra_widget(self, widget, x, y, width, height):
         self.__check_widget_for_overlap(x, y, width, height)
@@ -279,9 +304,12 @@ class Menu(Gtk.Grid):
         for row, row_contents in enumerate(self.__keyvals[self.__side]):
             for column, keyval in enumerate(row_contents):
                 grid_col = self.__key_coörds_to_grid_col(row, column)
-                if (keyval not in self.__items
-                        and not self.__key_overlaps_extra_widget(row,
-                                                                 grid_col)):
+                if (
+                        keyval not in self.__items
+                        and not self.__key_overlaps_extra_widget(
+                            row, grid_col
+                        )
+                ):
                     item = MenuItem(sensitive=False)
                     item.keyval = keyval
                     self.attach(item, grid_col, row, 4, 1)
@@ -308,8 +336,9 @@ class Menu(Gtk.Grid):
         in self.__extra_widgets, raise a ValueError.
         """
         if self.__key_overlaps_extra_widget(row, grid_col):
-            raise ValueError(f'Key at ({grid_col}, {row}) would overlap '
-                              'an extra widget')
+            raise ValueError(
+                f'Key at ({grid_col}, {row}) would overlap an extra widget'
+            )
 
     def __check_widget_for_overlap(self, x, y, width, height):
         """
@@ -321,12 +350,15 @@ class Menu(Gtk.Grid):
         for row, row_contents in enumerate(self.__keyvals[self.__side]):
             for column, keyval in enumerate(row_contents):
                 grid_col = self.__key_coörds_to_grid_col(row, column)
-                if (keyval in self.__items
+                if (
+                        keyval in self.__items
                         and x - 3 <= grid_col < x + width
-                        and y <= row < y + height):
-                    raise ValueError(f'Widget at ({x}, {y}) '
-                                     f'({width}×{height}) would overlap key '
-                                     f'{Gdk.keyval_name(keyval)}')
+                        and y <= row < y + height
+                ):
+                    raise ValueError(
+                        f'Widget at ({x}, {y}) ({width}×{height}) would '
+                        f'overlap key {Gdk.keyval_name(keyval)}'
+                    )
 
     def do_parent_set(self, old_parent):
         if old_parent is None:

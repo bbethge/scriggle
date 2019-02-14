@@ -11,8 +11,10 @@ class Editor(Gtk.ApplicationWindow):
     __ROW_MENU = 1
 
     def __init__(self, file=None, **props):
-        super().__init__(default_width=640, default_height=480,
-                         icon_name='scriggle', **props)
+        super().__init__(
+            default_width=640, default_height=480, icon_name='scriggle',
+            **props
+        )
         self.__file = file
         self.__saved = True
         self.__close_after_save = False
@@ -23,8 +25,9 @@ class Editor(Gtk.ApplicationWindow):
         self.__menu_stack = MenuStack(self)
         grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
 
-        scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN,
-                                      expand=True)
+        scroller = Gtk.ScrolledWindow(
+            shadow_type=Gtk.ShadowType.IN, expand=True
+        )
 
         self.__source_view = GtkSource.View(expand=True, monospace=True)
         scroller.add(self.__source_view)
@@ -48,27 +51,35 @@ class Editor(Gtk.ApplicationWindow):
             source_file = GtkSource.File(location=file)
             loader = GtkSource.FileLoader(buffer=self.buffer, file=source_file)
             # TODO: Show progress
-            loader.load_async(GLib.PRIORITY_DEFAULT, cancellable, None, None,
-                              lambda loader, result:
-                                  self.__finish_loading(loader, result,
-                                                        grid, hgrid, scroller))
+            loader.load_async(
+                GLib.PRIORITY_DEFAULT, cancellable, None, None,
+                lambda loader, result:
+                    self.__finish_loading(
+                        loader, result, grid, hgrid, scroller
+                    )
+            )
             cancel_button.connect('clicked', lambda b: cancellable.cancel())
 
         grid.show_all()
 
-    def __finish_loading(self, loader, result, main_grid, progress_grid,
-                         scroller):
+    def __finish_loading(
+            self, loader, result, main_grid, progress_grid, scroller
+    ):
         try:
             loader.load_finish(result)
         except GLib.Error as error:
-            message = (_('Unable to load “{filename}”: {message}')
-                       .format(filename=loader.props.location.get_path(),
-                               message=error.message))
-            dialog = Gtk.MessageDialog(self,
-                                       Gtk.DialogFlags.MODAL
-                                       | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                       Gtk.MessageType.ERROR,
-                                       Gtk.ButtonsType.CLOSE, message)
+            message = (
+                _('Unable to load “{filename}”: {message}')
+                .format(
+                    filename=loader.props.location.get_path(),
+                    message=error.message
+                )
+            )
+            dialog = Gtk.MessageDialog(
+                self,
+                Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                Gtk.MessageType.ERROR, Gtk.ButtonsType.CLOSE, message
+            )
             dialog.run()
             dialog.destroy()
         main_grid.remove(progress_grid)
@@ -91,19 +102,24 @@ class Editor(Gtk.ApplicationWindow):
     def do_window_state_event(self, event):
         if event.changed_mask & Gdk.WindowState.FOCUSED:
             self.__menu_stack.window_focus_changed(
-                bool(event.new_window_state & Gdk.WindowState.FOCUSED))
+                bool(event.new_window_state & Gdk.WindowState.FOCUSED)
+            )
         return Gtk.ApplicationWindow.do_window_state_event(self, event)
 
     def do_key_press_event(self, event):
-        if (event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
-                or event.state & Gdk.ModifierType.CONTROL_MASK):
+        if (
+                event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
+                or event.state & Gdk.ModifierType.CONTROL_MASK
+        ):
             return self.__menu_stack.key_event(event)
         else:
             return Gtk.ApplicationWindow.do_key_press_event(self, event)
 
     def do_key_release_event(self, event):
-        if (event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
-                or event.state & Gdk.ModifierType.CONTROL_MASK):
+        if (
+                event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
+                or event.state & Gdk.ModifierType.CONTROL_MASK
+        ):
             return self.__menu_stack.key_event(event)
         return Gtk.ApplicationWindow.do_key_release_event(self, event)
 
@@ -118,7 +134,8 @@ class Editor(Gtk.ApplicationWindow):
 
     def __on_cursor_position_changed(self, location):
         self.__menu_stack.status_area.set_cursor_position(
-            location.get_line(), location.get_line_offset())
+            location.get_line(), location.get_line_offset()
+        )
 
     def on_language_changed(self, language_id):
         lang_man = GtkSource.LanguageManager.get_default()
@@ -146,20 +163,22 @@ class Editor(Gtk.ApplicationWindow):
         if not self.__saved:
             DISCARD = 0
             SAVE = 1
-            dialog = Gtk.MessageDialog(self,
-                                       Gtk.DialogFlags.MODAL,
-                                       Gtk.MessageType.QUESTION,
-                                       Gtk.ButtonsType.NONE,
-                                       _('Save changes to {} before closing?')
-                                           .format(self.props.title))
-            dialog.add_buttons(_('Close without Saving'), DISCARD,
-                               _('Cancel'), Gtk.ResponseType.CANCEL,
-                               _('Save'), SAVE)
+            dialog = Gtk.MessageDialog(
+                self, Gtk.DialogFlags.MODAL, Gtk.MessageType.QUESTION,
+                Gtk.ButtonsType.NONE,
+                _('Save changes to {} before closing?')
+                .format(self.props.title)
+            )
+            dialog.add_buttons(
+                _('Close without Saving'), DISCARD,
+                _('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), SAVE
+            )
             dialog.set_default_response(SAVE)
             response = dialog.run()
             dialog.destroy()
-            if response in [Gtk.ResponseType.CANCEL,
-                            Gtk.ResponseType.DELETE_EVENT]:
+            if response in [
+                    Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT
+            ]:
                 return
             elif response == SAVE:
                 self.__close_after_save = True
@@ -186,7 +205,8 @@ class Editor(Gtk.ApplicationWindow):
     def on_save(self):
         if self.__file is None:
             chooser = Gtk.FileChooserNative.new(
-                _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None)
+                _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None
+            )
             response = chooser.run()
             if response != Gtk.ResponseType.ACCEPT:
                 return
@@ -197,26 +217,34 @@ class Editor(Gtk.ApplicationWindow):
         source_file = GtkSource.File(location=self.__file)
         cancellable = Gio.Cancellable()
         cancel_handler = self.__menu_stack.status_area.connect(
-            'save-cancel-clicked', lambda b: cancellable.cancel())
+            'save-cancel-clicked', lambda b: cancellable.cancel()
+        )
         self.__menu_stack.status_area.show_save_status()
         saver = GtkSource.FileSaver(buffer=self.buffer, file=source_file)
         # TODO: Show progress
-        saver.save_async(GLib.PRIORITY_DEFAULT, cancellable, None, None,
-                         self.__finish_saving, cancel_handler)
+        saver.save_async(
+            GLib.PRIORITY_DEFAULT, cancellable, None, None,
+            self.__finish_saving, cancel_handler
+        )
 
     def __finish_saving(self, saver, result, cancel_handler):
         try:
             saver.save_finish(result)
         except GLib.Error as error:
-            message = (_('Unable to save file “{filename}”: {message}')
-                       .format(filename=saver.props.location.get_path(),
-                               message=error.message))
-            dialog = Gtk.MessageDialog(self,
-                                       Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                       Gtk.MessageType.ERROR,
-                                       # XXX: Is ‘Close’ confusing (it
-                                       # will not close the file)?
-                                       Gtk.ButtonsType.CLOSE, message)
+            message = (
+                _('Unable to save file “{filename}”: {message}')
+                .format(
+                    filename=saver.props.location.get_path(),
+                    message=error.message
+                )
+            )
+            dialog = Gtk.MessageDialog(
+                self, Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                Gtk.MessageType.ERROR,
+                # XXX: Is ‘Close’ confusing (it
+                # will not close the file)?
+                Gtk.ButtonsType.CLOSE, message
+            )
             dialog.run()
             dialog.destroy()
             self.__save_terminated(cancel_handler)
@@ -250,25 +278,31 @@ class Editor(Gtk.ApplicationWindow):
         self.buffer.paste_clipboard(clip, None, True)
 
     def on_up(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.DISPLAY_LINES, -1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.DISPLAY_LINES, -1, False
+        )
 
     def on_down(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.DISPLAY_LINES, 1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.DISPLAY_LINES, 1, False
+        )
 
     def on_left(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.VISUAL_POSITIONS, -1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.VISUAL_POSITIONS, -1, False
+        )
 
     def on_right(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.VISUAL_POSITIONS, 1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.VISUAL_POSITIONS, 1, False
+        )
 
     def on_left_word(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.WORDS, -1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.WORDS, -1, False
+        )
 
     def on_right_word(self):
-        self.__source_view.emit('move-cursor',
-                                Gtk.MovementStep.WORDS, 1, False)
+        self.__source_view.emit(
+            'move-cursor', Gtk.MovementStep.WORDS, 1, False
+        )

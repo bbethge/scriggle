@@ -16,24 +16,32 @@ class Left(Menu):
         self.bind_key_to_action('e', '↑', 'on_up', _('Move the cursor up'))
         self.bind_key_to_action('s', '←', 'on_left', _('Move the cursor left'))
         self.bind_key_to_action('d', '↓', 'on_down', _('Move the cursor down'))
-        self.bind_key_to_action('f', '→', 'on_right',
-                                _('Move the cursor right'))
-        self.bind_key_to_action('w', _('← Word'), 'on_left_word',
-                                _('Move the cursor left by a word'))
-        self.bind_key_to_action('r', _('→ Word'), 'on_right_word',
-                                _('Move the cursor right by a word'))
+        self.bind_key_to_action(
+            'f', '→', 'on_right', _('Move the cursor right')
+        )
+        self.bind_key_to_action(
+            'w', _('← Word'), 'on_left_word',
+            _('Move the cursor left by a word')
+        )
+        self.bind_key_to_action(
+            'r', _('→ Word'), 'on_right_word',
+            _('Move the cursor right by a word')
+        )
         self.add_unused_keys()
 
 
 class Right(Menu):
     def __init__(self, stack):
         super().__init__(stack, Menu.Side.RIGHT)
-        self.bind_key_to_submenu('y', _('Style…'), Style(stack),
-                                 _('Options related to code style'))
-        self.bind_key_to_action('n', _('New'), 'on_new',
-                                _('Create a new document'))
-        self.bind_key_to_action('i', _('Close'), 'on_close',
-                                _('Close the current document'))
+        self.bind_key_to_submenu(
+            'y', _('Style…'), Style(stack), _('Options related to code style')
+        )
+        self.bind_key_to_action(
+            'n', _('New'), 'on_new', _('Create a new document')
+        )
+        self.bind_key_to_action(
+            'i', _('Close'), 'on_close', _('Close the current document')
+        )
         self.bind_key_to_action('o', _('Open…'), 'on_open')
         self.bind_key_to_action('j', _('Find'), 'on_find')
         self.bind_key_to_action('k', _('Save'), 'on_save')
@@ -46,10 +54,12 @@ class Style(Menu):
         self.bind_key_to_back_button('bracketright')
         self.bind_key_to_submenu(
             'j', _('Language…'), Language(stack),
-            _('Set the computer language to highlight syntax for')),
+            _('Set the computer language to highlight syntax for')
+        )
         self.bind_key_to_toggle(
             'k', _('Use Spaces'), 'on_use_spaces',
-            _('Whether to indent with spaces instead of tabs'))
+            _('Whether to indent with spaces instead of tabs')
+        )
         self.bind_key_to_action('l', _('Tab Width'), 'on_tab_width')
         self.add_unused_keys()
 
@@ -63,12 +73,14 @@ class Language(Menu):
         scroller.add(self.__language_list)
         self.add_extra_widget(scroller, 0, 0, 24, 3)
         self.focus_widget = self.__language_list
-        self.__language_list.connect('selection-changed',
-                                     self.__on_language_changed)
+        self.__language_list.connect(
+            'selection-changed', self.__on_language_changed
+        )
         self.__language_list.connect(
             'item-activated',
             lambda _view, path:
-                self.stack.on_language_activated(self.__language_list, path))
+                self.stack.on_language_activated(self.__language_list, path)
+        )
         self.add_unused_keys()
 
     @property
@@ -79,8 +91,9 @@ class Language(Menu):
         iters = language_list.get_selected_items()
         if iters:
             iter_ = language_list.props.model.get_iter(iters[0])
-            (id_,) = language_list.props.model.get(iter_,
-                                                   language_list.COLUMN_ID)
+            (id_,) = language_list.props.model.get(
+                iter_, language_list.COLUMN_ID
+            )
             self.stack.editor.on_language_changed(id_)
 
 
@@ -89,11 +102,13 @@ class LanguageList(Gtk.IconView):
     COLUMN_TEXT = 1
 
     def __init__(self, **props):
-        super().__init__(text_column=self.COLUMN_TEXT, item_padding=0,
-                         item_orientation=Gtk.Orientation.HORIZONTAL,
-                         row_spacing=0, activate_on_single_click=True,
-                         # TODO: Remove hard-coded size?
-                         item_width=144, **props)
+        super().__init__(
+            text_column=self.COLUMN_TEXT, item_padding=0,
+            item_orientation=Gtk.Orientation.HORIZONTAL, row_spacing=0, 
+            activate_on_single_click=True,
+            # TODO: Remove hard-coded size?
+            item_width=144, **props
+        )
         model = Gtk.ListStore(str, str)
         model.insert(-1, ['plain', _('Plain')])
         lang_man = GtkSource.LanguageManager.get_default()
@@ -160,8 +175,9 @@ class LanguageList(Gtk.IconView):
             self.__select_item(self.__previous_selection)
         if self.__search_timeout:
             GLib.source_remove(self.__search_timeout)
-        self.__search_timeout = GLib.timeout_add(1000,
-                                                 self.__clear_search_string)
+        self.__search_timeout = GLib.timeout_add(
+            1000, self.__clear_search_string
+        )
 
     def __clear_search_string(self):
         self.__search_string = ''

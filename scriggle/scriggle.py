@@ -46,8 +46,10 @@ def home_substitute(filename):
 
 class Application(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id='com.example.Scriggle',
-                         flags=Gio.ApplicationFlags.HANDLES_OPEN)
+        super().__init__(
+            application_id='com.example.Scriggle',
+            flags=Gio.ApplicationFlags.HANDLES_OPEN
+        )
         self.__unnamed_window_number = 1
 
     def do_open(self, files, _n_files, _hint):
@@ -66,7 +68,8 @@ class Application(Gtk.Application):
         windows = self.get_windows()
         if window.filename is None:
             window.props.title = _('New File {:d}').format(
-                self.__unnamed_window_number)
+                self.__unnamed_window_number
+            )
             self.__unnamed_window_number += 1
         else:
             basenames = self.__get_basenames(window)
@@ -87,8 +90,10 @@ class Application(Gtk.Application):
         Return the basenames of the filenames of all windows that have
         filenames, except ‘window’.
         """
-        return {GLib.path_get_basename(w.filename) for w in self.get_windows()
-                if w is not window and w.filename is not None}
+        return {
+            GLib.path_get_basename(w.filename) for w in self.get_windows()
+            if w is not window and w.filename is not None
+        }
 
     def do_window_removed(self, window):
         Gtk.Application.do_window_removed(self, window)
@@ -98,14 +103,16 @@ class Application(Gtk.Application):
         other_windows = [
             w for w in self.get_windows()
             if w.filename is not None and w is not window
-                and GLib.path_get_basename(w.filename) == basename]
+                and GLib.path_get_basename(w.filename) == basename
+        ]
         if len(other_windows) == 1:
             other_windows[0].props.title = basename
 
     def show_open_dialog(self, window):
-        chooser = Gtk.FileChooserNative(title=_('Open File'),
-                                        transient_for=window,
-                                        action=Gtk.FileChooserAction.OPEN)
+        chooser = Gtk.FileChooserNative(
+            title=_('Open File'), transient_for=window,
+            action=Gtk.FileChooserAction.OPEN
+        )
         response = chooser.run()
         if response == Gtk.ResponseType.ACCEPT:
             filename = chooser.get_filename()
@@ -130,7 +137,9 @@ def main():
             None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
             Gtk.ButtonsType.CLOSE,
             _('Scriggle requires GTK+ version 3.{} or later').format(
-                gtk_minor_version))
+                gtk_minor_version
+            )
+        )
         dialog.run()
         return 1
     return Application().run(sys.argv)

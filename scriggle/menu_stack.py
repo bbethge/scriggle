@@ -11,8 +11,9 @@ from . import menus
 class StatusArea(Gtk.Grid):
     def __init__(self, **props):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, **props)
-        self.__save_status = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL,
-                                      no_show_all=True)
+        self.__save_status = Gtk.Grid(
+            orientation=Gtk.Orientation.HORIZONTAL, no_show_all=True
+        )
         self.add(self.__save_status)
 
         save_label = Gtk.Label(_('Saving…'))
@@ -20,13 +21,15 @@ class StatusArea(Gtk.Grid):
         self.__save_status.add(save_label)
 
         save_cancel_button = Gtk.Button.new_with_label(_('Cancel'))
-        save_cancel_button.connect('clicked',
-                                   lambda b: self.emit('save-cancel-clicked'))
+        save_cancel_button.connect(
+            'clicked', lambda b: self.emit('save-cancel-clicked')
+        )
         save_cancel_button.show()
         self.__save_status.add(save_cancel_button)
 
-        self.__cursor_position_label = Gtk.Label(hexpand=True,
-                                                 halign=Gtk.Align.END)
+        self.__cursor_position_label = Gtk.Label(
+            hexpand=True, halign=Gtk.Align.END
+        )
         self.add(self.__cursor_position_label)
 
     def show_save_status(self):
@@ -48,7 +51,8 @@ class StatusArea(Gtk.Grid):
         """
         self.__cursor_position_label.set_text(
             _('Line {line}, Column {column}')
-            .format(line=line+1, column=column+1))
+            .format(line=line+1, column=column+1)
+        )
 
     def pop_out_cursor_position_label(self):
         """
@@ -85,7 +89,8 @@ class MenuStack(Gtk.Overlay):
         self.__menu_pinned = False
 
         self.__stack = Gtk.Stack(
-            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN)
+            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN
+        )
         self.add(self.__stack)
 
         self.__status_area = StatusArea()
@@ -166,7 +171,8 @@ class MenuStack(Gtk.Overlay):
         self.__stack.props.visible_child = menu
         if menu.side == Menu.Side.LEFT:
             self.__position_label = (
-                self.__status_area.pop_out_cursor_position_label())
+                self.__status_area.pop_out_cursor_position_label()
+            )
             self.__position_label.props.halign = Gtk.Align.END
             self.__position_label.props.valign = Gtk.Align.START
             self.add_overlay(self.__position_label)

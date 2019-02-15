@@ -278,17 +278,15 @@ class Menu(Gtk.Grid):
         if tooltip is not None:
             item.props.tooltip_markup = tooltip
         item.show()
-        column, row = self.__keyval_to_coörds(keyval)
-        grid_col = self.__key_coörds_to_grid_col(row, column)
-        self.__check_key_for_overlap(row, grid_col)
-        self.attach(item, grid_col, row, 4, 1)
+        x, y = self.__keyval_to_coörds(keyval)
+        self.__check_key_for_overlap(x, y)
+        self.attach(item, x, y, 4, 1)
         self.__items[keyval] = item
 
     def __keyval_to_coörds(self, keyval):
-        for row, row_contents in enumerate(self.__keyvals[self.__side]):
-            for column, found_keyval in enumerate(row_contents):
-                if found_keyval == keyval:
-                    return column, row
+        for x, y, found_keyval in self.__iter_keyvals_with_coörds():
+            if found_keyval == keyval:
+                return x, y
         raise ValueError(
             f'Keyval {keyval} ({Gdk.keyval_name(keyval)}) not found'
         )
@@ -307,43 +305,39 @@ class Menu(Gtk.Grid):
         probably want to call this at the end of their constructor,
         although this makes it hard to derive further sub-subclasses.
         """
-        for row, row_contents in enumerate(self.__keyvals[self.__side]):
-            for column, keyval in enumerate(row_contents):
-                grid_col = self.__key_coörds_to_grid_col(row, column)
-                if (
-                        keyval not in self.__items
-                        and not self.__key_overlaps_extra_widget(
-                            row, grid_col
-                        )
-                ):
-                    item = MenuItem(sensitive=False)
-                    item.keyval = keyval
-                    self.attach(item, grid_col, row, 4, 1)
+        for x, y, keyval in self.__iter_keyvals_with_coörds():
+            if (
+                    keyval not in self.__items
+                    and not self.__key_overlaps_extra_widget(x, y)
+            ):
+                item = MenuItem(sensitive=False)
+                item.keyval = keyval
+                self.attach(item, x, y, 4, 1)
 
-    def __key_overlaps_extra_widget(self, row, grid_col):
+    def __key_overlaps_extra_widget(self, x, y):
         """
         Check whether a given key would overlap an existing extra widget.
 
-        If the key at grid coördinates (row, grid_col) overlaps a widget
+        If the key at grid coördinates (x, y) overlaps a widget
         in self.__extra_widgets, return True.  Otherwise, False.
         """
-        for x, y, width, height, widget in self.__extra_widgets:
-            if x - 3 <= grid_col < x + width and y <= row < y + height:
+        for widget_x, widget_y, width, height, widget in self.__extra_widgets:
+            if -3 <= x - widget_x < width and 0 <= y - widget_y < height:
                 # Key is inside an extra widget
                 return True
         else:
             return False
 
-    def __check_key_for_overlap(self, row, grid_col):
+    def __check_key_for_overlap(self, x, y):
         """
         Check whether a given key would overlap an existing extra widget.
 
-        If the key at grid coördinates (row, grid_col) overlaps a widget
+        If the key at grid coördinates (x, y) overlaps a widget
         in self.__extra_widgets, raise a ValueError.
         """
-        if self.__key_overlaps_extra_widget(row, grid_col):
+        if self.__key_overlaps_extra_widget(x, y):
             raise ValueError(
-                f'Key at ({grid_col}, {row}) would overlap an extra widget'
+                f'Key at ({x}, {y}) would overlap an extra widget'
             )
 
     def __check_widget_for_overlap(self, x, y, width, height):
@@ -353,18 +347,26 @@ class Menu(Gtk.Grid):
         If the rectangle given by (x, y, width, height) overlaps one of
         the bound keys, raise a ValueError.
         """
-        for row, row_contents in enumerate(self.__keyvals[self.__side]):
-            for column, keyval in enumerate(row_contents):
-                grid_col = self.__key_coörds_to_grid_col(row, column)
-                if (
-                        keyval in self.__items
-                        and x - 3 <= grid_col < x + width
-                        and y <= row < y + height
-                ):
-                    raise ValueError(
-                        f'Widget at ({x}, {y}) ({width}×{height}) would '
-                        f'overlap key {Gdk.keyval_name(keyval)}'
-                    )
+        for key_x, key_y, keyval in self.__iter_keyvals_with_coörds():
+            if (
+                    keyval in self.__items
+                    and x - 3 <= key_x < x + width and y <= key_y < y + height
+            ):
+                raise ValueError(
+                    f'Widget at ({x}, {y}) ({width}×{height}) would '
+                    f'overlap key {Gdk.keyval_name(keyval)}'
+                )
+
+    def __iter_keyvals_with_coörds(self):
+        """
+        Iterate over keyvals and their coördinates.
+
+        This is an iterator that yields an (x, y, keyval) tuple for each
+        key that is available on this side of the keyboard.
+        """
+        for y, keyvals in enumerate(self.__keyvals[self.__side]):
+            for column, keyval in enumerate(keyvals):
+                yield self.__get_key_x(column, y), y, keyval
 
     def do_parent_set(self, old_parent):
         if old_parent is None:
@@ -380,14 +382,14 @@ class Menu(Gtk.Grid):
         return self.__stack
 
     @staticmethod
-    def __key_coörds_to_grid_col(row, column):
+    def __get_key_x(column, y):
         """
         Return the grid column number of a key.
 
         Given the coördinates of a key, return the leftmost column
         its button occupies in the grid.
         """
-        return 4*column + row**2 - row//2
+        return 4*column + 3*y//2
 
     def key_event(self, event):
         """

@@ -1,0 +1,12 @@
+Status area: source type, indentation settings
+    OR: No status area, menu takes space away from text view when shown
+Test file operation status indicators
+Show whether file is saved in window title
+Handle “file changed externally” error
+Add contexts and comments to translatable strings
+Show tooltips when a key is held down?
+Find and replace
+Adapt to different keyboard layouts
+Investigate whether Menu can call MenuStack.pin_menu to handle focus widgets
+    instead of MenuStack handling them
+Strip trailing whitespace

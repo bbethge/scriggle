@@ -9,7 +9,7 @@ from .menu import Menu
 class Left(Menu):
     def __init__(self, stack):
         super().__init__(stack, Menu.Side.LEFT)
-        self.bind_key_to_action('z', _('Undo'), 'on_undo')
+        self.__undo = self.bind_key_to_action('z', _('Undo'), 'on_undo')
         self.bind_key_to_action('x', _('Cut'), 'on_cut')
         self.bind_key_to_action('c', _('Copy'), 'on_copy')
         self.bind_key_to_action('v', _('Paste'), 'on_paste')
@@ -28,6 +28,10 @@ class Left(Menu):
             _('Move the cursor right by a word')
         )
         self.add_unused_keys()
+
+    @property
+    def undo(self):
+        return self.__undo
 
 
 class Right(Menu):

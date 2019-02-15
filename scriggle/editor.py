@@ -33,6 +33,14 @@ class Editor(Gtk.ApplicationWindow):
         scroller.add(self.__source_view)
         scroller.show_all()
         self.buffer.connect('mark-set', self.__on_mark_set)
+        self.__menu_stack.left_menu.undo.props.sensitive = False
+        self.buffer.connect(
+            'notify::can-undo',
+            lambda buffer_, pspec:
+                self.__menu_stack.left_menu.undo.set_sensitive(
+                    buffer_.props.can_undo
+                )
+        )
         self.__on_cursor_position_changed(self.buffer.get_start_iter())
 
         if file is None:
@@ -260,8 +268,6 @@ class Editor(Gtk.ApplicationWindow):
         self.__menu_stack.status_area.hide_save_status()
 
     def on_undo(self):
-        # TODO: Set sensitivity of the button depending on
-        # self.buffer.can_undo.
         self.buffer.undo()
 
     def on_cut(self):

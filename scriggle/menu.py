@@ -66,6 +66,9 @@ class AutoSizeLabel(Gtk.Widget):
         if baseline == -1:
             baseline = layout_baseline
         cr.translate(rect.x, rect.y + baseline - layout_baseline)
+        style = self.get_style_context()
+        color = style.get_color(style.get_state())
+        Gdk.cairo_set_source_rgba(cr, color)
         PangoCairo.show_layout(cr, layout)
         return True
 
@@ -125,12 +128,15 @@ class MenuItem(MenuItemMixin, Gtk.Button):
         super().__init__(**props)
 
     def key_event(self, event):
-        if event.type == Gdk.EventType.KEY_PRESS:
-            self.set_state_flags(Gtk.StateFlags.ACTIVE, False)
+        if self.is_sensitive():
+            if event.type == Gdk.EventType.KEY_PRESS:
+                self.set_state_flags(Gtk.StateFlags.ACTIVE, False)
+            else:
+                self.unset_state_flags(Gtk.StateFlags.ACTIVE)
+                self.clicked()
+            return True
         else:
-            self.unset_state_flags(Gtk.StateFlags.ACTIVE)
-            self.clicked()
-        return True
+            return False
 
 
 class ToggleMenuItem(MenuItemMixin, Gtk.ToggleButton):
@@ -138,8 +144,12 @@ class ToggleMenuItem(MenuItemMixin, Gtk.ToggleButton):
         super().__init__(**props)
 
     def key_event(self, event):
-        if event.type == Gdk.EventType.KEY_PRESS:
-            self.props.active = not self.props.active
+        if self.is_sensitive():
+            if event.type == Gdk.EventType.KEY_PRESS:
+                self.props.active = not self.props.active
+            return True
+        else:
+            return False
 
 
 class Menu(Gtk.Grid):
@@ -229,12 +239,21 @@ class Menu(Gtk.Grid):
     def bind_key_to_action(
             self, keyval_name, label, method_name, tooltip=None
     ):
+        """
+        Bind a key to an action and return it.
+
+        Create a MenuItem with keyval given by keval_name, label
+        ‘label’, and tooltip markup ‘tooltip’, put it in the appropriate
+        place, and cause it to invoke method_name with no arguments on
+        the editor when clicked.  Return the MenuItem.
+        """
         item = MenuItem()
         item.connect(
             'clicked',
             lambda button: getattr(self.__stack.editor, method_name)()
         )
         self.__install_item(item, keyval_name, label, tooltip)
+        return item
 
     def bind_key_to_toggle(
             self, keyval_name, label, method_name, tooltip=None

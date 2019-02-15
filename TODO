@@ -10,3 +10,8 @@ Adapt to different keyboard layouts
 Investigate whether Menu can call MenuStack.pin_menu to handle focus widgets
     instead of MenuStack handling them
 Strip trailing whitespace
+Automatically detect language
+Automatically detect indentation settings
+Configure style settings per language and per directory
+Right margin
+Make key repeat work for movement commands

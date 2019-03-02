@@ -8,88 +8,87 @@ from .menu import Menu
 from . import menus
 
 
-class StatusArea(Gtk.Grid):
-    # FIXME: Add this to the left menu
+class MenuArea(Gtk.Overlay):
+    def __init__(self, editor, **props):
+        """
+        Create a new MenuArea.
+
+        This widget contains the cursor position indicator along with
+        the menu stack.
+
+        ‘editor’ is the Editor that contains this widget.
+        """
+        super().__init__()
+        self.__editor = editor
+
+        self.__stack = MenuStack()
+        self.add(self.__stack)
+
+        # TODO: Switch ‘halign’ based on the text direction.
+        self.__position_label = CursorPositionLabel(
+            halign=Gtk.Align.END, valign=Gtk.Align.START
+        )
+        self.__position_label.props.no_show_all = True
+        self.add_overlay(self.__position_label)
+
+    @property
+    def editor(self):
+        return self.__editor
+
+    @property
+    def left_menu(self):
+        return self.__stack.left_menu
+
+    @property
+    def right_menu(self):
+        return self.__stack.right_menu
+
+    @property
+    def cursor_position(self):
+        return self.__position_label.position
+
+    @cursor_position.setter
+    def cursor_position(self, position):
+        self.__position_label.position = position
+
+    def go_back(self):
+        self.__stack.go_back()
+
+    def show_menu_immediately(self, menu):
+        if menu.side == Menu.Side.LEFT:
+            self.__position_label.show()
+        else:
+            self.__position_label.hide()
+        self.__stack.show_menu_immediately(menu)
+
+    def key_event(self, event):
+        return self.__stack.key_event(event)
+
+
+class CursorPositionLabel(Gtk.Label):
     def __init__(self, **props):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, **props)
-        self.__save_status = Gtk.Grid(
-            orientation=Gtk.Orientation.HORIZONTAL, no_show_all=True
+        super().__init__(**props)
+        self.position = (1, 1)
+
+    @property
+    def position(self):
+        """A pair containing the zero-based line and column number."""
+        return self.__line, self.__column
+
+    @position.setter
+    def position(self, position):
+        self.__line, self.__column = position
+        self.props.label = _('Line {0}, Column {1}').format(
+            self.__line + 1, self.__column + 1
         )
-        self.add(self.__save_status)
-
-        save_label = Gtk.Label(_('Saving…'))
-        save_label.show()
-        self.__save_status.add(save_label)
-
-        save_cancel_button = Gtk.Button.new_with_label(_('Cancel'))
-        save_cancel_button.connect(
-            'clicked', lambda b: self.emit('save-cancel-clicked')
-        )
-        save_cancel_button.show()
-        self.__save_status.add(save_cancel_button)
-
-        self.__cursor_position_label = Gtk.Label(
-            hexpand=True, halign=Gtk.Align.END
-        )
-        self.add(self.__cursor_position_label)
-
-    def show_save_status(self):
-        self.__save_status.show()
-
-    def hide_save_status(self):
-        self.__save_status.hide()
-
-    @GObject.Signal
-    def save_cancel_clicked(self):
-        pass
-
-    def set_cursor_position(self, line, column):
-        """
-        Update cursor position display.
-
-        Set the (zero-based) line and column number for cursor position
-        display.
-        """
-        self.__cursor_position_label.set_text(
-            _('Line {line}, Column {column}')
-            .format(line=line+1, column=column+1)
-        )
-
-    def pop_out_cursor_position_label(self):
-        """
-        Remove and retrieve the cursor position label.
-
-        Remove the cursor position label from ‘self’ and return it
-        so it can be added to another widget.  You should still
-        call self.set_cursor_position to update the label.
-        """
-        self.remove(self.__cursor_position_label)
-        return self.__cursor_position_label
-
-    def pop_in_cursor_position_label(self):
-        """
-        Undo pop_out_cursor_position_label.
-
-        Add the cursor position label back to ‘self’.  It should be
-        removed from any other container before calling this.
-        """
-        self.add(self.__cursor_position_label)
 
 
 class MenuStack(Gtk.Stack):
-    def __init__(self, editor, **props):
-        """
-        Create a new MenuStack
-
-        Create a new MenuStack with all menus.
-        ‘editor’ is the Editor that contains this widget.
-        """
+    def __init__(self, **props):
         super().__init__(
             transition_type=Gtk.StackTransitionType.OVER_UP_DOWN, **props
         )
-        self.__editor = editor
         self.__history = []
-        self.__menu_pinned = False
         self.__previous_focus = None
 
         self.__right_menu = menus.Right(self)
@@ -100,6 +99,10 @@ class MenuStack(Gtk.Stack):
         self.__left_menu.show_all()
         self.add(self.__left_menu)
 
+    @property
+    def menu_revealer(self):
+        return self.props.parent.editor.menu_revealer
+
     def go_back(self):
         # XXX: This makes the assumption that pinned menus have no
         # submenus.
@@ -108,14 +111,14 @@ class MenuStack(Gtk.Stack):
 
     def pin_menu(self, focus_widget):
         self.__previous_focus = self.get_toplevel().get_focus()
-        self.__editor.menu_revealer.menu_pinned = True
+        self.menu_revealer.menu_pinned = True
         focus_widget.grab_focus()
 
     def unpin_menu(self):
         if self.__previous_focus is not None:
             self.__previous_focus.grab_focus()
             self.__previous_focus = None
-        self.__editor.menu_revealer.menu_pinned = False
+        self.menu_revealer.menu_pinned = False
 
     def add_submenu(self, submenu):
         self.add(submenu)
@@ -126,7 +129,7 @@ class MenuStack(Gtk.Stack):
         self.__history.append(self.props.visible_child)
         self.props.visible_child = submenu
 
-    def show_menu_instantly(self, menu):
+    def show_menu_immediately(self, menu):
         transition_type = self.props.transition_type
         self.props.transition_type = Gtk.StackTransitionType.NONE
         self.props.visible_child = menu
@@ -137,7 +140,7 @@ class MenuStack(Gtk.Stack):
 
     @property
     def editor(self):
-        return self.__editor
+        return self.props.parent.editor
 
     @property
     def right_menu(self):

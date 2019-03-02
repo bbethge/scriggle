@@ -3,7 +3,7 @@ from gettext import gettext as _
 import gi
 from gi.repository import GLib, GObject, Gio, Gdk, Gtk, GtkSource
 
-from .menu_stack import MenuStack
+from .menu_stack import MenuArea
 
 
 class Editor(Gtk.ApplicationWindow):
@@ -144,11 +144,9 @@ class Editor(Gtk.ApplicationWindow):
         self.__saved = False
 
     def __on_cursor_position_changed(self, location):
-        # FIXME
-        #self.__menu_stack.status_area.set_cursor_position(
-        #    location.get_line(), location.get_line_offset()
-        #)
-        pass
+        self.__menu_revealer.cursor_position = (
+            location.get_line(), location.get_line_offset()
+        )
 
     def on_language_changed(self, language_id):
         lang_man = GtkSource.LanguageManager.get_default()
@@ -345,8 +343,8 @@ class MenuRevealer(Gtk.Revealer):
     def __init__(self, editor):
         super().__init__(transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
         self.__editor = editor
-        self.__menu_stack = MenuStack(editor)
-        self.add(self.__menu_stack)
+        self.__menu_area = MenuArea(editor)
+        self.add(self.__menu_area)
         self.__menu_pinned = False
         self.__control_pressed = False
 
@@ -362,11 +360,19 @@ class MenuRevealer(Gtk.Revealer):
 
     @property
     def left_menu(self):
-        return self.__menu_stack.left_menu
+        return self.__menu_area.left_menu
 
     @property
     def right_menu(self):
-        return self__menu_stack.right_menu
+        return self__menu_area.right_menu
+
+    @property
+    def cursor_position(self):
+        return self.__menu_area.cursor_position
+
+    @cursor_position.setter
+    def cursor_position(self, position):
+        self.__menu_area.cursor_position = position
 
     def key_event(self, event):
         if event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]:
@@ -375,7 +381,7 @@ class MenuRevealer(Gtk.Revealer):
             else:
                 return self.__on_control_released()
         elif event.state & Gdk.ModifierType.CONTROL_MASK:
-            return self.__menu_stack.key_event(event)
+            return self.__menu_area.key_event(event)
         else:
             return False
 
@@ -384,12 +390,12 @@ class MenuRevealer(Gtk.Revealer):
         self.props.reveal_child = True
         if not self.__menu_pinned:
             if keyval == Gdk.KEY_Control_L:
-                self.__menu_stack.show_menu_instantly(
-                    self.__menu_stack.right_menu
+                self.__menu_area.show_menu_immediately(
+                    self.__menu_area.right_menu
                 )
             else:
-                self.__menu_stack.show_menu_instantly(
-                    self.__menu_stack.left_menu
+                self.__menu_area.show_menu_immediately(
+                    self.__menu_area.left_menu
                 )
 
     def __on_control_released(self):

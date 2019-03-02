@@ -10,9 +10,10 @@ It’s still bare-bones, but you can:
  * Save files
  * Cut, copy, and paste; although there’s no good way to select text with the keyboard
  * Use syntax highlighting
+ * Set indentation options
 
 ## Requirements
-Scriggle uses Python 3.7 and GTK+ 3 (including the Python GObject Introspection bindings).  On Linux, you probably have GTK+ 3, but you might have an older version of Python installed by default.  You can probably install Python 3.7 from you package manager alongside the default version.  On Windows, see the [Python Releases for Windows][1] page and the [GTK+ installation instructions for Windows][2] (make sure to install the Python bindings).
+Scriggle uses Python 3 and GTK+ 3 (including the Python GObject Introspection bindings).  On Linux, you probably have both of these installed by default.  On Windows, see the [Python Releases for Windows][1] page and the [GTK+ installation instructions for Windows][2] (make sure to install the Python bindings).
 
 [1]: https://www.python.org/downloads/windows/
 [2]: https://www.gtk.org/download/windows.php
@@ -24,14 +25,14 @@ If you modify the icon, you will need [Inkscape][5] to rebuild the PNG files usi
 ## Running from the source directory
 You can try Scriggle without installing it by running
 
-    python3.7 -m scriggle.scriggle
+    python3 -m scriggle.scriggle
 
 from the source code directory.
 
 ## Installation
 Once you have installed the requirements and checked out the code, you can install Scriggle using [pip][3] (not from the [PyPI][4], though: you have to check out the git repository).  Use
 
-    python3.7 -m pip install /path/to/scriggle
+    pip3 install /path/to/scriggle
 
 On Linux (and probably MacOS), this will install to your home directory, so you don’t need to be superuser.  Afterward, you can run `scriggle` from any directory and (on Linux) it will appear in your applications menu.
 

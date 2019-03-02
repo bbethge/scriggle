@@ -1,14 +1,15 @@
 from gettext import gettext as _
 
 import gi
-from gi.repository import GLib, Gio, Gdk, Gtk, GtkSource
+from gi.repository import GLib, GObject, Gio, Gdk, Gtk, GtkSource
 
 from .menu_stack import MenuStack
 
 
 class Editor(Gtk.ApplicationWindow):
     __ROW_TEXT_VIEW = 0
-    __ROW_MENU = 1
+    __ROW_SAVE_INDICATOR = 1
+    __ROW_MENU = 2
 
     def __init__(self, file=None, **props):
         super().__init__(
@@ -21,6 +22,9 @@ class Editor(Gtk.ApplicationWindow):
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
+
+        self.__save_indicator = SaveIndicator()
+        grid.attach(self.__save_indicator, 0, self.__ROW_SAVE_INDICATOR, 1, 1)
 
         self.__menu_revealer = MenuRevealer(self)
         grid.attach(self.__menu_revealer, 0, self.__ROW_MENU, 1, 1)
@@ -225,11 +229,10 @@ class Editor(Gtk.ApplicationWindow):
         assert self.__file.get_path() is not None
         source_file = GtkSource.File(location=self.__file)
         cancellable = Gio.Cancellable()
-        # FIXME: Find another place to show this
-        #cancel_handler = self.__menu_stack.status_area.connect(
-        #    'save-cancel-clicked', lambda b: cancellable.cancel()
-        #)
-        #self.__menu_stack.status_area.show_save_status()
+        cancel_handler = self.__save_indicator.connect(
+            'cancel-clicked', lambda b: cancellable.cancel()
+        )
+        self.__save_indicator.show()
         saver = GtkSource.FileSaver(buffer=self.buffer, file=source_file)
         # TODO: Show progress
         saver.save_async(
@@ -267,9 +270,8 @@ class Editor(Gtk.ApplicationWindow):
 
     def __save_terminated(self, cancel_handler):
         """Called when a save is finished or aborted due to error."""
-        # FIXME
-        #self.__menu_stack.status_area.disconnect(cancel_handler)
-        #self.__menu_stack.status_area.hide_save_status()
+        self.__save_indicator.hide()
+        self.__save_indicator.disconnect(cancel_handler)
 
     def on_undo(self):
         self.buffer.undo()
@@ -315,6 +317,28 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view.emit(
             'move-cursor', Gtk.MovementStep.WORDS, 1, False
         )
+
+
+class SaveIndicator(Gtk.Grid):
+    def __init__(self, **props):
+        super().__init__(
+            orientation=Gtk.Orientation.HORIZONTAL, no_show_all=True
+        )
+
+        save_label = Gtk.Label(_('Saving…'))
+        save_label.show()
+        self.add(save_label)
+
+        save_cancel_button = Gtk.Button.new_with_label(_('Cancel'))
+        save_cancel_button.connect(
+            'clicked', lambda b: self.emit('cancel-clicked')
+        )
+        save_cancel_button.show()
+        self.add(save_cancel_button)
+
+    @GObject.Signal
+    def cancel_clicked(self):
+        pass
 
 
 class MenuRevealer(Gtk.Revealer):

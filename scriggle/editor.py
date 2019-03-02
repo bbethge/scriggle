@@ -21,9 +21,9 @@ class Editor(Gtk.ApplicationWindow):
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
-        
-        self.__menu_stack = MenuStack(self)
-        grid.attach(self.__menu_stack, 0, self.__ROW_MENU, 1, 1)
+
+        self.__menu_revealer = MenuRevealer(self)
+        grid.attach(self.__menu_revealer, 0, self.__ROW_MENU, 1, 1)
 
         scroller = Gtk.ScrolledWindow(
             shadow_type=Gtk.ShadowType.IN, expand=True
@@ -33,11 +33,11 @@ class Editor(Gtk.ApplicationWindow):
         scroller.add(self.__source_view)
         scroller.show_all()
         self.buffer.connect('mark-set', self.__on_mark_set)
-        self.__menu_stack.left_menu.undo.props.sensitive = False
+        self.__menu_revealer.left_menu.undo.props.sensitive = False
         self.buffer.connect(
             'notify::can-undo',
             lambda buffer_, pspec:
-                self.__menu_stack.left_menu.undo.set_sensitive(
+                self.__menu_revealer.left_menu.undo.set_sensitive(
                     buffer_.props.can_undo
                 )
         )
@@ -107,29 +107,28 @@ class Editor(Gtk.ApplicationWindow):
         else:
             return self.__file.get_path()
 
+    @property
+    def menu_revealer(self):
+        return self.__menu_revealer
+
     def do_window_state_event(self, event):
         if event.changed_mask & Gdk.WindowState.FOCUSED:
-            self.__menu_stack.window_focus_changed(
+            self.__menu_revealer.window_focus_changed(
                 bool(event.new_window_state & Gdk.WindowState.FOCUSED)
             )
         return Gtk.ApplicationWindow.do_window_state_event(self, event)
 
     def do_key_press_event(self, event):
-        if (
-                event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
-                or event.state & Gdk.ModifierType.CONTROL_MASK
-        ):
-            return self.__menu_stack.key_event(event)
+        if self.__menu_revealer.key_event(event):
+            return True
         else:
             return Gtk.ApplicationWindow.do_key_press_event(self, event)
 
     def do_key_release_event(self, event):
-        if (
-                event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]
-                or event.state & Gdk.ModifierType.CONTROL_MASK
-        ):
-            return self.__menu_stack.key_event(event)
-        return Gtk.ApplicationWindow.do_key_release_event(self, event)
+        if self.__menu_revealer.key_event(event):
+            return True
+        else:
+            return Gtk.ApplicationWindow.do_key_release_event(self, event)
 
     def __on_mark_set(self, _buffer, location, mark):
         if mark.props.name == 'insert':
@@ -141,9 +140,11 @@ class Editor(Gtk.ApplicationWindow):
         self.__saved = False
 
     def __on_cursor_position_changed(self, location):
-        self.__menu_stack.status_area.set_cursor_position(
-            location.get_line(), location.get_line_offset()
-        )
+        # FIXME
+        #self.__menu_stack.status_area.set_cursor_position(
+        #    location.get_line(), location.get_line_offset()
+        #)
+        pass
 
     def on_language_changed(self, language_id):
         lang_man = GtkSource.LanguageManager.get_default()
@@ -206,8 +207,9 @@ class Editor(Gtk.ApplicationWindow):
     def on_open(self):
         self.props.application.show_open_dialog(self)
 
-    def on_find(self):
-        print('“Find” activated')
+    def on_find(self, needle):
+        # TODO
+        print(f'Find “{needle}”')
 
     def on_save(self):
         if self.__file is None:
@@ -223,10 +225,11 @@ class Editor(Gtk.ApplicationWindow):
         assert self.__file.get_path() is not None
         source_file = GtkSource.File(location=self.__file)
         cancellable = Gio.Cancellable()
-        cancel_handler = self.__menu_stack.status_area.connect(
-            'save-cancel-clicked', lambda b: cancellable.cancel()
-        )
-        self.__menu_stack.status_area.show_save_status()
+        # FIXME: Find another place to show this
+        #cancel_handler = self.__menu_stack.status_area.connect(
+        #    'save-cancel-clicked', lambda b: cancellable.cancel()
+        #)
+        #self.__menu_stack.status_area.show_save_status()
         saver = GtkSource.FileSaver(buffer=self.buffer, file=source_file)
         # TODO: Show progress
         saver.save_async(
@@ -264,8 +267,9 @@ class Editor(Gtk.ApplicationWindow):
 
     def __save_terminated(self, cancel_handler):
         """Called when a save is finished or aborted due to error."""
-        self.__menu_stack.status_area.disconnect(cancel_handler)
-        self.__menu_stack.status_area.hide_save_status()
+        # FIXME
+        #self.__menu_stack.status_area.disconnect(cancel_handler)
+        #self.__menu_stack.status_area.hide_save_status()
 
     def on_undo(self):
         self.buffer.undo()
@@ -311,3 +315,69 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view.emit(
             'move-cursor', Gtk.MovementStep.WORDS, 1, False
         )
+
+
+class MenuRevealer(Gtk.Revealer):
+    def __init__(self, editor):
+        super().__init__(transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        self.__editor = editor
+        self.__menu_stack = MenuStack(editor)
+        self.add(self.__menu_stack)
+        self.__menu_pinned = False
+        self.__control_pressed = False
+
+    @property
+    def menu_pinned(self):
+        return self.__menu_pinned
+
+    @menu_pinned.setter
+    def menu_pinned(self, value):
+        if not value and not self.__control_pressed:
+            self.props.reveal_child = False
+        self.__menu_pinned = value
+
+    @property
+    def left_menu(self):
+        return self.__menu_stack.left_menu
+
+    @property
+    def right_menu(self):
+        return self__menu_stack.right_menu
+
+    def key_event(self, event):
+        if event.keyval in [Gdk.KEY_Control_L, Gdk.KEY_Control_R]:
+            if event.type == Gdk.EventType.KEY_PRESS:
+                return self.__on_control_pressed(event.keyval)
+            else:
+                return self.__on_control_released()
+        elif event.state & Gdk.ModifierType.CONTROL_MASK:
+            return self.__menu_stack.key_event(event)
+        else:
+            return False
+
+    def __on_control_pressed(self, keyval):
+        self.__control_pressed = True
+        self.props.reveal_child = True
+        if not self.__menu_pinned:
+            if keyval == Gdk.KEY_Control_L:
+                self.__menu_stack.show_menu_instantly(
+                    self.__menu_stack.right_menu
+                )
+            else:
+                self.__menu_stack.show_menu_instantly(
+                    self.__menu_stack.left_menu
+                )
+
+    def __on_control_released(self):
+        self.__control_pressed = False
+        if not self.__menu_pinned:
+            self.props.reveal_child = False
+
+    def window_focus_changed(self, focused):
+        """
+        Notify ‘self’ of focus changes in its toplevel window
+
+        Treat loss of window focus the same as Ctrl being released.
+        """
+        if not focused:
+            self.__on_control_released()

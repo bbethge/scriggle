@@ -9,6 +9,7 @@ from . import menus
 
 
 class StatusArea(Gtk.Grid):
+    # FIXME: Add this to the left menu
     def __init__(self, **props):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, **props)
         self.__save_status = Gtk.Grid(
@@ -75,74 +76,68 @@ class StatusArea(Gtk.Grid):
         self.add(self.__cursor_position_label)
 
 
-class MenuStack(Gtk.Overlay):
+class MenuStack(Gtk.Stack):
     def __init__(self, editor, **props):
         """
         Create a new MenuStack
 
-        Create a new MenuStack, with a status area and all menus.
+        Create a new MenuStack with all menus.
         ‘editor’ is the Editor that contains this widget.
         """
-        super().__init__(**props)
+        super().__init__(
+            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN, **props
+        )
         self.__editor = editor
         self.__history = []
         self.__menu_pinned = False
         self.__previous_focus = None
 
-        self.__stack = Gtk.Stack(
-            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN
-        )
-        self.add(self.__stack)
-
-        self.__status_area = StatusArea()
-        self.__status_area.show_all()
-        self.__stack.add(self.__status_area)
-
-        self.__position_label = None
-
         self.__right_menu = menus.Right(self)
         self.__right_menu.show_all()
-        self.__stack.add(self.__right_menu)
+        self.add(self.__right_menu)
 
         self.__left_menu = menus.Left(self)
         self.__left_menu.show_all()
-        self.__stack.add(self.__left_menu)
+        self.add(self.__left_menu)
 
     def go_back(self):
+        # XXX: This makes the assumption that pinned menus have no
+        # submenus.
         self.unpin_menu()
-        self.__stack.props.visible_child = self.__history.pop()
+        self.props.visible_child = self.__history.pop()
 
     def pin_menu(self, focus_widget):
         self.__previous_focus = self.get_toplevel().get_focus()
-        self.__menu_pinned = True
+        self.__editor.menu_revealer.menu_pinned = True
         focus_widget.grab_focus()
 
     def unpin_menu(self):
         if self.__previous_focus is not None:
             self.__previous_focus.grab_focus()
             self.__previous_focus = None
-        self.__menu_pinned = False
+        self.__editor.menu_revealer.menu_pinned = False
 
     def add_submenu(self, submenu):
-        self.__stack.add(submenu)
+        self.add(submenu)
 
     def show_submenu(self, submenu):
         if submenu.focus_widget is not None:
             self.pin_menu(submenu.focus_widget)
-        self.__history.append(self.__stack.props.visible_child)
-        self.__stack.props.visible_child = submenu
+        self.__history.append(self.props.visible_child)
+        self.props.visible_child = submenu
+
+    def show_menu_instantly(self, menu):
+        transition_type = self.props.transition_type
+        self.props.transition_type = Gtk.StackTransitionType.NONE
+        self.props.visible_child = menu
+        self.props.transition_type = transition_type
 
     def on_language_activated(self, language_list, path):
-        # TODO: Provide an unpin_menu method and have the menu invoke it?
-        self.show_status_area()
+        self.unpin_menu()
 
     @property
     def editor(self):
         return self.__editor
-
-    @property
-    def status_area(self):
-        return self.__status_area
 
     @property
     def right_menu(self):
@@ -154,44 +149,7 @@ class MenuStack(Gtk.Overlay):
 
     def key_event(self, event):
         """Handle a key event from the window."""
-        menu = None
-        if event.keyval == Gdk.KEY_Control_L:
-            menu = self.__right_menu
-        elif event.keyval == Gdk.KEY_Control_R:
-            menu = self.__left_menu
-        if menu is not None:
-            if not self.__menu_pinned:
-                if event.type == Gdk.EventType.KEY_PRESS:
-                    self.__show_menu(menu)
-                else:
-                    self.show_status_area()
-            return True
-        elif self.__stack.props.visible_child is not self.__status_area:
-            return self.__stack.props.visible_child.key_event(event)
-        return False
+        return self.props.visible_child.key_event(event)
 
     def __show_menu(self, menu):
-        self.__stack.props.visible_child = menu
-        if menu.side == Menu.Side.LEFT:
-            self.__position_label = (
-                self.__status_area.pop_out_cursor_position_label()
-            )
-            self.__position_label.props.halign = Gtk.Align.END
-            self.__position_label.props.valign = Gtk.Align.START
-            self.add_overlay(self.__position_label)
-
-    def window_focus_changed(self, focused):
-        """Notify ‘self’ of focus changes in its toplevel window"""
-        if not focused and not self.__menu_pinned:
-            self.show_status_area()
-
-    def show_status_area(self):
-        """Hide any shown menu and show the status area instead."""
-        # FIXME: The cursor position label is momentarily covered by
-        # the background of the menu as it slides away.
-        if self.__position_label is not None:
-            self.remove(self.__position_label)
-            self.__status_area.pop_in_cursor_position_label()
-            self.__position_label = None
-        self.unpin_menu()
-        self.__stack.props.visible_child = self.__status_area
+        self.props.visible_child = menu

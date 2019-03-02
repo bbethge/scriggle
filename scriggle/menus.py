@@ -76,7 +76,7 @@ class Style(Menu):
         # style menu and found it had a focus widget.  This seems too
         # complicated.
         tab_width_selector.connect(
-            'activate', lambda selector: self.stack.show_status_area()
+            'activate', lambda selector: self.stack.unpin_menu()
         )
         self.add_extra_widget(tab_width_selector, 8, 0, 4, 1)
         self.bind_key_to_widget('u', _('Tab Width:'), tab_width_selector)

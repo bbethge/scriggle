@@ -13,19 +13,25 @@ class Left(Menu):
         self.bind_key_to_action('x', _('Cut'), 'on_cut')
         self.bind_key_to_action('c', _('Copy'), 'on_copy')
         self.bind_key_to_action('v', _('Paste'), 'on_paste')
-        self.bind_key_to_action('e', '↑', 'on_up', _('Move the cursor up'))
-        self.bind_key_to_action('s', '←', 'on_left', _('Move the cursor left'))
-        self.bind_key_to_action('d', '↓', 'on_down', _('Move the cursor down'))
         self.bind_key_to_action(
-            'f', '→', 'on_right', _('Move the cursor right')
+            'e', '↑', 'on_up', _('Move the cursor up'), repeat=True
+        )
+        self.bind_key_to_action(
+            's', '←', 'on_left', _('Move the cursor left'), repeat=True
+        )
+        self.bind_key_to_action(
+            'd', '↓', 'on_down', _('Move the cursor down'), repeat=True
+        )
+        self.bind_key_to_action(
+            'f', '→', 'on_right', _('Move the cursor right'), repeat=True
         )
         self.bind_key_to_action(
             'w', _('← Word'), 'on_left_word',
-            _('Move the cursor left by a word')
+            _('Move the cursor left by a word'), repeat=True
         )
         self.bind_key_to_action(
             'r', _('→ Word'), 'on_right_word',
-            _('Move the cursor right by a word')
+            _('Move the cursor right by a word'), repeat=True
         )
         self.add_unused_keys()
 

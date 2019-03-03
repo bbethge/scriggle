@@ -14,5 +14,4 @@ Automatically detect language
 Automatically detect indentation settings
 Configure style settings per language and per directory
 Right margin
-Make key repeat work for movement commands
 Reference ‘parent’ instead of passing a reference to the constructor?

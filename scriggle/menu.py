@@ -124,16 +124,30 @@ class MenuItemMixin:
 
 
 class MenuItem(MenuItemMixin, Gtk.Button):
-    def __init__(self, **props):
+    def __init__(self, repeat=False, **props):
+        """
+        Create a menu item.
+
+        If ‘repeat’ is False, the menu item will be activated once per
+        key press, when the key is released.  This is similar to the way
+        clicking on a button with the mouse works.  If ‘repeat’ is True,
+        the menu item will be activated when the key is pressed and
+        repeatedly as long as the key is held down.  This is similar to
+        how keys normally work when editing text.
+        """
         super().__init__(**props)
+        self.__repeat = repeat
 
     def key_event(self, event):
         if self.is_sensitive():
             if event.type == Gdk.EventType.KEY_PRESS:
                 self.set_state_flags(Gtk.StateFlags.ACTIVE, False)
+                if self.__repeat:
+                    self.clicked()
             else:
                 self.unset_state_flags(Gtk.StateFlags.ACTIVE)
-                self.clicked()
+                if not self.__repeat:
+                    self.clicked()
             return True
         else:
             return False
@@ -237,7 +251,7 @@ class Menu(Gtk.Grid):
             self.attach(spacer, -4, 0, 4, 1)
 
     def bind_key_to_action(
-            self, keyval_name, label, method_name, tooltip=None
+            self, keyval_name, label, method_name, tooltip=None, repeat=False
     ):
         """
         Bind a key to an action and return it.
@@ -247,7 +261,7 @@ class Menu(Gtk.Grid):
         place, and cause it to invoke method_name with no arguments on
         the editor when clicked.  Return the MenuItem.
         """
-        item = MenuItem()
+        item = MenuItem(repeat=repeat)
         item.connect(
             'clicked',
             lambda button: getattr(self.__stack.editor, method_name)()

@@ -9,19 +9,17 @@ from . import menus
 
 
 class MenuArea(Gtk.Overlay):
-    def __init__(self, editor, **props):
+    def __init__(self, command_manager, **props):
         """
         Create a new MenuArea.
 
         This widget contains the cursor position indicator along with
         the menu stack.
-
-        ‘editor’ is the Editor that contains this widget.
         """
         super().__init__()
-        self.__editor = editor
+        self.__command_manager = command_manager
 
-        self.__stack = MenuStack()
+        self.__stack = MenuStack(command_manager)
         self.add(self.__stack)
 
         # TODO: Switch ‘halign’ based on the text direction.
@@ -30,10 +28,6 @@ class MenuArea(Gtk.Overlay):
         )
         self.__position_label.props.no_show_all = True
         self.add_overlay(self.__position_label)
-
-    @property
-    def editor(self):
-        return self.__editor
 
     @property
     def left_menu(self):
@@ -51,9 +45,6 @@ class MenuArea(Gtk.Overlay):
     def cursor_position(self, position):
         self.__position_label.position = position
 
-    def go_back(self):
-        self.__stack.go_back()
-
     def show_menu_immediately(self, menu):
         if menu.side == Menu.Side.LEFT:
             self.__position_label.show()
@@ -68,7 +59,7 @@ class MenuArea(Gtk.Overlay):
 class CursorPositionLabel(Gtk.Label):
     def __init__(self, **props):
         super().__init__(**props)
-        self.position = (1, 1)
+        self.position = 0, 0
 
     @property
     def position(self):
@@ -84,26 +75,27 @@ class CursorPositionLabel(Gtk.Label):
 
 
 class MenuStack(Gtk.Stack):
-    def __init__(self, **props):
+    def __init__(self, command_manager, **props):
         super().__init__(
             transition_type=Gtk.StackTransitionType.OVER_UP_DOWN, **props
         )
+        self.__command_manager = command_manager
         self.__history = []
         self.__previous_focus = None
 
-        self.__right_menu = menus.Right(self)
+        self.__right_menu = menus.Right(command_manager)
         self.__right_menu.show_all()
         self.add(self.__right_menu)
 
-        self.__left_menu = menus.Left(self)
+        self.__left_menu = menus.Left(command_manager)
         self.__left_menu.show_all()
         self.add(self.__left_menu)
 
     @property
     def menu_revealer(self):
-        return self.props.parent.editor.menu_revealer
+        return self.props.parent.props.parent
 
-    def go_back(self):
+    def on_go_back(self):
         # XXX: This makes the assumption that pinned menus have no
         # submenus.
         self.unpin_menu()
@@ -120,10 +112,10 @@ class MenuStack(Gtk.Stack):
             self.__previous_focus = None
         self.menu_revealer.menu_pinned = False
 
-    def add_submenu(self, submenu):
+    def on_add_submenu(self, submenu):
         self.add(submenu)
 
-    def show_submenu(self, submenu):
+    def on_show_submenu(self, submenu):
         if submenu.focus_widget is not None:
             self.pin_menu(submenu.focus_widget)
         self.__history.append(self.props.visible_child)
@@ -139,10 +131,6 @@ class MenuStack(Gtk.Stack):
         self.unpin_menu()
 
     @property
-    def editor(self):
-        return self.props.parent.editor
-
-    @property
     def right_menu(self):
         return self.__right_menu
 
@@ -153,6 +141,3 @@ class MenuStack(Gtk.Stack):
     def key_event(self, event):
         """Handle a key event from the window."""
         return self.props.visible_child.key_event(event)
-
-    def __show_menu(self, menu):
-        self.props.visible_child = menu

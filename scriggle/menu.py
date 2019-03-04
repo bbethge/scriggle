@@ -204,16 +204,15 @@ class Menu(Gtk.Grid):
         )
     ]
 
-    def __init__(self, stack, side, **props):
+    def __init__(self, side, command_manager, **props):
         """
         Create a new menu.
 
         ‘side’ tells which side of the keyboard to use (Side.LEFT
         or Side.RIGHT).
 
-        ‘stack’ is the MenuStack this menu belongs to.  The menu will
-        call methods on this object to notify it when commands are
-        invoked.
+        command_manager is the command manager to call command handlers
+        on.
 
         ‘props’ contains GObject properties to be set.
 
@@ -224,8 +223,8 @@ class Menu(Gtk.Grid):
             row_homogeneous=True, column_homogeneous=True, hexpand=True,
             **props
         )
-        self.__stack = stack
         self.__side = side
+        self.__command_manager = command_manager
         self.__submenus = set()
         """
         The set of this menu’s submenus.
@@ -251,32 +250,33 @@ class Menu(Gtk.Grid):
             self.attach(spacer, -4, 0, 4, 1)
 
     def bind_key_to_action(
-            self, keyval_name, label, method_name, tooltip=None, repeat=False
+            self, keyval_name, label, command_name, tooltip=None, repeat=False
     ):
         """
         Bind a key to an action and return it.
 
         Create a MenuItem with keyval given by keval_name, label
         ‘label’, and tooltip markup ‘tooltip’, put it in the appropriate
-        place, and cause it to invoke method_name with no arguments on
-        the editor when clicked.  Return the MenuItem.
+        place, and cause it to activate the command command_name with no
+        arguments on the command manager when clicked.  Return the
+        MenuItem.
         """
         item = MenuItem(repeat=repeat)
         item.connect(
             'clicked',
-            lambda button: getattr(self.__stack.editor, method_name)()
+            lambda button: getattr(self.__command_manager, command_name)()
         )
         self.__install_item(item, keyval_name, label, tooltip)
         return item
 
     def bind_key_to_toggle(
-            self, keyval_name, label, method_name, tooltip=None
+            self, keyval_name, label, command_name, tooltip=None
     ):
         item = ToggleMenuItem()
         item.connect(
             'toggled',
             lambda button:
-                getattr(self.__stack.editor, method_name)(
+                getattr(self.__command_manager, command_name)(
                     button.props.active
                 )
         )
@@ -287,13 +287,13 @@ class Menu(Gtk.Grid):
         submenu.show_all()
         item = MenuItem()
         item.connect(
-            'clicked', lambda button: self.__stack.show_submenu(submenu)
+            'clicked', lambda button: self.stack.on_show_submenu(submenu)
         )
         self.__install_item(item, keyval_name, label, tooltip)
 
     def bind_key_to_back_button(self, keyval_name):
         item = MenuItem()
-        item.connect('clicked', lambda button: self.__stack.go_back())
+        item.connect('clicked', lambda button: self.stack.on_go_back())
         self.__install_item(
             item, keyval_name, _('Back'), _('Go back to the previous menu')
         )
@@ -301,7 +301,9 @@ class Menu(Gtk.Grid):
     def bind_key_to_widget(self, keyval_name, label, widget, tooltip=None):
         item = MenuItem()
         # XXX: Will this mess up the focus managed by the MenuStack?
-        item.connect('clicked', lambda button: self.__stack.pin_menu(widget))
+        item.connect(
+            'clicked', lambda button: self.stack.pin_menu(widget)
+        )
         self.__install_item(item, keyval_name, label, tooltip)
 
     def __install_item(self, item, keyval_name, label, tooltip):
@@ -404,7 +406,7 @@ class Menu(Gtk.Grid):
     def do_parent_set(self, old_parent):
         if old_parent is None:
             for submenu in self.__submenus:
-                self.__stack.add_submenu(submenu)
+                self.stack.on_add_submenu(submenu)
 
     @property
     def side(self):
@@ -412,7 +414,7 @@ class Menu(Gtk.Grid):
 
     @property
     def stack(self):
-        return self.__stack
+        return self.props.parent
 
     @staticmethod
     def __get_key_x(column, y):

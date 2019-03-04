@@ -7,67 +7,67 @@ from .menu import Menu
 
 
 class Left(Menu):
-    def __init__(self, stack):
-        super().__init__(stack, Menu.Side.LEFT)
-        self.__undo = self.bind_key_to_action('z', _('Undo'), 'on_undo')
-        self.bind_key_to_action('x', _('Cut'), 'on_cut')
-        self.bind_key_to_action('c', _('Copy'), 'on_copy')
-        self.bind_key_to_action('v', _('Paste'), 'on_paste')
+    def __init__(self, command_manager):
+        super().__init__(Menu.Side.LEFT, command_manager)
+        undo = self.bind_key_to_action('z', _('Undo'), 'undo')
+        @command_manager.set_can_undo.connect
+        def on_set_can_undo(can_undo):
+            undo.props.sensitive = can_undo
+        self.bind_key_to_action('x', _('Cut'), 'cut')
+        self.bind_key_to_action('c', _('Copy'), 'copy')
+        self.bind_key_to_action('v', _('Paste'), 'opaste')
         self.bind_key_to_action(
-            'e', '↑', 'on_up', _('Move the cursor up'), repeat=True
+            'e', '↑', 'up', _('Move the cursor up'), repeat=True
         )
         self.bind_key_to_action(
-            's', '←', 'on_left', _('Move the cursor left'), repeat=True
+            's', '←', 'left', _('Move the cursor left'), repeat=True
         )
         self.bind_key_to_action(
-            'd', '↓', 'on_down', _('Move the cursor down'), repeat=True
+            'd', '↓', 'down', _('Move the cursor down'), repeat=True
         )
         self.bind_key_to_action(
-            'f', '→', 'on_right', _('Move the cursor right'), repeat=True
+            'f', '→', 'right', _('Move the cursor right'), repeat=True
         )
         self.bind_key_to_action(
-            'w', _('← Word'), 'on_left_word',
+            'w', _('← Word'), 'left_word',
             _('Move the cursor left by a word'), repeat=True
         )
         self.bind_key_to_action(
-            'r', _('→ Word'), 'on_right_word',
+            'r', _('→ Word'), 'right_word',
             _('Move the cursor right by a word'), repeat=True
         )
         self.add_unused_keys()
 
-    @property
-    def undo(self):
-        return self.__undo
-
 
 class Right(Menu):
-    def __init__(self, stack):
-        super().__init__(stack, Menu.Side.RIGHT)
+    def __init__(self, command_manager):
+        super().__init__(Menu.Side.RIGHT, command_manager)
         self.bind_key_to_submenu(
-            'y', _('Style…'), Style(stack), _('Options related to code style')
+            'y', _('Style…'), Style(command_manager),
+            _('Options related to code style')
         )
         self.bind_key_to_action(
-            'n', _('New'), 'on_new', _('Create a new document')
+            'n', _('New'), 'new', _('Create a new document')
         )
         self.bind_key_to_action(
-            'i', _('Close'), 'on_close', _('Close the current document')
+            'i', _('Close'), 'close', _('Close the current document')
         )
-        self.bind_key_to_action('o', _('Open…'), 'on_open')
-        self.bind_key_to_action('j', _('Find'), 'on_find')
-        self.bind_key_to_action('k', _('Save'), 'on_save')
+        self.bind_key_to_action('o', _('Open…'), 'open')
+        self.bind_key_to_action('j', _('Find'), 'find')
+        self.bind_key_to_action('k', _('Save'), 'save')
         self.add_unused_keys()
 
 
 class Style(Menu):
-    def __init__(self, stack):
-        super().__init__(stack, Menu.Side.RIGHT)
+    def __init__(self, command_manager):
+        super().__init__(Menu.Side.RIGHT, command_manager)
         self.bind_key_to_back_button('bracketright')
         self.bind_key_to_submenu(
-            'j', _('Language…'), Language(stack),
+            'j', _('Language…'), Language(command_manager),
             _('Set the computer language to highlight syntax for')
         )
         self.bind_key_to_toggle(
-            'k', _('Use Spaces'), 'on_use_spaces',
+            'k', _('Use Spaces'), 'set_use_spaces',
             _('Whether to indent with spaces instead of tabs')
         )
         tab_width_selector = Gtk.SpinButton(
@@ -76,7 +76,7 @@ class Style(Menu):
         tab_width_selector.connect(
             'value-changed',
             lambda selector:
-                self.stack.editor.on_tab_width_changed(selector.props.value)
+                command_manager.set_tab_width(selector.props.value)
         )
         # XXX: The menu was pinned by the MenuStack when it showed the
         # style menu and found it had a focus widget.  This seems too
@@ -90,8 +90,9 @@ class Style(Menu):
 
 
 class Language(Menu):
-    def __init__(self, stack):
-        super().__init__(stack, Menu.Side.RIGHT)
+    def __init__(self, command_manager):
+        super().__init__(Menu.Side.RIGHT, command_manager)
+        self.__command_manager = command_manager
         self.bind_key_to_back_button('bracketright')
         scroller = Gtk.ScrolledWindow(shadow_type=Gtk.ShadowType.IN)
         self.__language_list = LanguageList()
@@ -103,6 +104,7 @@ class Language(Menu):
         )
         self.__language_list.connect(
             'item-activated',
+            # TODO
             lambda _view, path:
                 self.stack.on_language_activated(self.__language_list, path)
         )
@@ -119,7 +121,7 @@ class Language(Menu):
             (id_,) = language_list.props.model.get(
                 iter_, language_list.COLUMN_ID
             )
-            self.stack.editor.on_language_changed(id_)
+            self.__command_manager.set_language(id_)
 
 
 class LanguageList(Gtk.IconView):

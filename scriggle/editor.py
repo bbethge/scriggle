@@ -3,6 +3,7 @@ from gettext import gettext as _
 import gi
 from gi.repository import GLib, GObject, Gio, Gdk, Gtk, GtkSource
 
+from .command_manager import CommandManager
 from .menu_stack import MenuArea
 
 
@@ -19,6 +20,7 @@ class Editor(Gtk.ApplicationWindow):
         self.__file = file
         self.__saved = True
         self.__close_after_save = False
+        self.__command_manager = CommandManager()
 
         grid = Gtk.Grid(orientation=Gtk.Orientation.VERTICAL)
         self.add(grid)
@@ -26,7 +28,7 @@ class Editor(Gtk.ApplicationWindow):
         self.__save_indicator = SaveIndicator()
         grid.attach(self.__save_indicator, 0, self.__ROW_SAVE_INDICATOR, 1, 1)
 
-        self.__menu_revealer = MenuRevealer(self)
+        self.__menu_revealer = MenuRevealer(self.__command_manager)
         grid.attach(self.__menu_revealer, 0, self.__ROW_MENU, 1, 1)
 
         scroller = Gtk.ScrolledWindow(
@@ -37,15 +39,31 @@ class Editor(Gtk.ApplicationWindow):
         scroller.add(self.__source_view)
         scroller.show_all()
         self.buffer.connect('mark-set', self.__on_mark_set)
-        self.__menu_revealer.left_menu.undo.props.sensitive = False
+        self.__command_manager.set_can_undo(False)
         self.buffer.connect(
             'notify::can-undo',
             lambda buffer_, pspec:
-                self.__menu_revealer.left_menu.undo.set_sensitive(
-                    buffer_.props.can_undo
-                )
+                self.__command_manager.set_can_undo(buffer_.props.can_undo)
         )
         self.__on_cursor_position_changed(self.buffer.get_start_iter())
+
+        self.__command_manager.undo.connect(self.on_undo)
+        self.__command_manager.cut.connect(self.on_cut)
+        self.__command_manager.copy.connect(self.on_copy)
+        self.__command_manager.paste.connect(self.on_paste)
+        self.__command_manager.up.connect(self.on_up)
+        self.__command_manager.left.connect(self.on_left)
+        self.__command_manager.down.connect(self.on_down)
+        self.__command_manager.right.connect(self.on_right)
+        self.__command_manager.left_word.connect(self.on_left_word)
+        self.__command_manager.right_word.connect(self.on_right_word)
+        self.__command_manager.new.connect(self.on_new)
+        self.__command_manager.close.connect(self.on_close)
+        self.__command_manager.open.connect(self.on_open)
+        self.__command_manager.save.connect(self.on_save)
+        self.__command_manager.set_use_spaces.connect(self.on_use_spaces)
+        self.__command_manager.set_tab_width.connect(self.on_tab_width_changed)
+        self.__command_manager.set_language.connect(self.on_language_changed)
 
         if file is None:
             grid.attach(scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
@@ -340,10 +358,10 @@ class SaveIndicator(Gtk.Grid):
 
 
 class MenuRevealer(Gtk.Revealer):
-    def __init__(self, editor):
+    def __init__(self, command_manager):
         super().__init__(transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
-        self.__editor = editor
-        self.__menu_area = MenuArea(editor)
+        self.__command_manager = command_manager
+        self.__menu_area = MenuArea(command_manager)
         self.add(self.__menu_area)
         self.__menu_pinned = False
         self.__control_pressed = False

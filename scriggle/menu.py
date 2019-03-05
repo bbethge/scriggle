@@ -13,7 +13,7 @@ class AutoSizeLabel(Gtk.Widget):
     text in the allocation it receives.
     """
     def __init__(self, markup='', **props):
-        super().__init__(**props)
+        super().__init__(vexpand=True, **props)
         # XXX: This should be done in the instance init function, but
         # PyGObject doesn’t want anyone to override the instance init
         # function except for Gtk.Template.
@@ -41,36 +41,81 @@ class AutoSizeLabel(Gtk.Widget):
         return min(self.__preferred_width, 40), self.__preferred_width
 
     def do_get_preferred_height_and_baseline_for_width(self, width):
+        # Always return the height and baseline for standard size text,
+        # even though we might not draw at the standard size.  We don’t
+        # want to make the label taller when we are prepared to cram the
+        # text into a standard-height space.
         layout = self.create_pango_layout(self.__markup)
-        _ink_rect, log_rect = layout.get_pixel_extents()
-        if layout.get_line_count() > 1:
-            baseline = log_rect.height * 2 // 3
-        else:
-            baseline = layout.get_baseline() // Pango.SCALE
-        return log_rect.height, log_rect.height, baseline, baseline
+        _ink_extents, extents = layout.get_pixel_extents()
+        baseline = layout.get_baseline() // Pango.SCALE
+        return extents.height, extents.height, baseline, baseline
 
     def do_draw(self, cr):
         width = self.get_allocated_width()
         height = self.get_allocated_height()
         baseline = self.get_allocated_baseline()
-        layout = self.create_pango_layout('')
-        layout.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
-        layout.set_width(width * Pango.SCALE)
-        layout.set_height(height * Pango.SCALE)
-        for size in ('medium', 'small', 'x-small', 'xx-small'):
-            layout.set_markup(f'<span size="{size}">{self.__markup}</span>')
-            if not layout.is_ellipsized():
-                break
-        _ink_rect, rect = layout.get_pixel_extents()
-        layout_baseline = layout.get_baseline() // Pango.SCALE
-        if baseline == -1:
-            baseline = layout_baseline
-        cr.translate(rect.x, rect.y + baseline - layout_baseline)
+        layout, top = self.__get_layout_and_top(width, height, baseline)
+        # When the width of the layout is set and it is right-aligned
+        # (which is normal for right-to-left text, but can also be
+        # requested for left-to-right text), the layout coördinates are
+        # relative to the top *right* corner (so the left edge is
+        # negative).  Contrary to the documentation, the top of the
+        # logical extents rectangle is always zero.
+        #                ⮦(0, 0)
+        # ┌──────────────┬──────────────┐
+        # │ Right-aligned│Left-aligned  │
+        # │text goes here│text goes here│
+        # └──────────────┴──────────────┘
+        _ink_extents, extents = layout.get_pixel_extents()
+        cr.translate(
+            extents.x if extents.x >= 0 else extents.x + extents.width,
+            extents.y + top
+        )
         style = self.get_style_context()
         color = style.get_color(style.get_state())
         Gdk.cairo_set_source_rgba(cr, color)
+        # Upper-left (or upper-right; see above) corner of logical
+        # extents is at the origin.
         PangoCairo.show_layout(cr, layout)
         return True
+
+    def __get_layout_and_top(self, width, height, baseline):
+        """
+        Create a layout and return it with its top coördinate.
+
+        Given the width, height, and baseline of a rectangle, generate
+        a layout to render the label’s markup into that rectangle,
+        aligning to the baseline if possible.  ‘baseline’ may be -1 to
+        indicate no baseline preference.  Return the layout and the y-
+        coördinate where the top of the layout should be relative to the
+        given rectangle.
+        """
+        layout = self.create_pango_layout('')
+        # Don’t request ellipsization here because then it won’t wrap.
+        layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+        layout.set_width(width * Pango.SCALE)
+        for size in ('medium', 'small', 'x-small', 'xx-small'):
+            layout.set_markup(f'<span size="{size}">{self.__markup}</span>')
+            _ink_extents, extents = layout.get_pixel_extents()
+            if extents.height <= height:
+                # Text fits at this size.
+                layout_baseline = layout.get_baseline() // Pango.SCALE
+                should_align_baselines = (
+                    baseline != -1 and not layout.is_wrapped()
+                    and layout_baseline <= baseline
+                )
+                if should_align_baselines:
+                    top = baseline - layout_baseline
+                else:
+                    top = (height - extents.height) // 2
+                break
+        else:
+            # Text doesn’t fit even at the smallest size, so ellipsize.
+            layout.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+            layout.set_height(height * Pango.SCALE)
+            _ink_extents, extents = layout.get_pixel_extents()
+            top = (height - extents.height) // 2
+        return layout, top
 
 
 class MenuItemMixin:
@@ -84,7 +129,9 @@ class MenuItemMixin:
     def __init__(self, **props):
         super().__init__(focus_on_click=False, **props)
 
-        self.__grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+        self.__grid = Gtk.Grid(
+            orientation=Gtk.Orientation.HORIZONTAL, vexpand=False
+        )
         self.add(self.__grid)
 
         self.__label = AutoSizeLabel(

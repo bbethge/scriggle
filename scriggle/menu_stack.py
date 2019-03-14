@@ -84,11 +84,9 @@ class MenuStack(Gtk.Stack):
         self.__previous_focus = None
 
         self.__right_menu = menus.Right(command_manager)
-        self.__right_menu.show_all()
         self.add(self.__right_menu)
 
         self.__left_menu = menus.Left(command_manager)
-        self.__left_menu.show_all()
         self.add(self.__left_menu)
 
     @property

@@ -142,8 +142,6 @@ class MenuItemMixin:
         self.__keyval_label = Gtk.Label(valign=Gtk.Align.BASELINE)
         self.__grid.add(self.__keyval_label)
 
-        self.__grid.show_all()
-
         self.keyval = None
 
     @property
@@ -290,7 +288,6 @@ class Menu(Gtk.Grid):
         This is a set of tuples with the format (x, y, width, height, widget).
         """
         spacer = Gtk.Label()
-        spacer.show()
         if self.__side == self.Side.LEFT:
             self.attach(spacer, 23, 2, 9, 1)
         else:
@@ -331,7 +328,6 @@ class Menu(Gtk.Grid):
 
     def bind_key_to_submenu(self, keyval_name, label, submenu, tooltip=None):
         self.__submenus.add(submenu)
-        submenu.show_all()
         item = MenuItem()
         item.connect(
             'clicked', lambda button: self.stack.on_show_submenu(submenu)
@@ -359,7 +355,7 @@ class Menu(Gtk.Grid):
         item.label = label
         if tooltip is not None:
             item.props.tooltip_markup = tooltip
-        item.show()
+        item.show_all()
         x, y = self.__keyval_to_coörds(keyval)
         self.__check_key_for_overlap(x, y)
         self.attach(item, x, y, 4, 1)

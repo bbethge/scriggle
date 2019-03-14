@@ -37,7 +37,6 @@ class Editor(Gtk.ApplicationWindow):
 
         self.__source_view = GtkSource.View(expand=True, monospace=True)
         scroller.add(self.__source_view)
-        scroller.show_all()
         self.buffer.connect('mark-set', self.__on_mark_set)
         self.__command_manager.set_can_undo(False)
         self.buffer.connect(
@@ -75,7 +74,6 @@ class Editor(Gtk.ApplicationWindow):
             cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
             hgrid.add(cancel_button)
             grid.attach(hgrid, 0, self.__ROW_TEXT_VIEW, 1, 1)
-            hgrid.show_all()
 
             cancellable = Gio.Cancellable()
             source_file = GtkSource.File(location=file)
@@ -89,8 +87,6 @@ class Editor(Gtk.ApplicationWindow):
                     )
             )
             cancel_button.connect('clicked', lambda b: cancellable.cancel())
-
-        grid.show_all()
 
     def __finish_loading(
             self, loader, result, main_grid, progress_grid, scroller
@@ -114,6 +110,7 @@ class Editor(Gtk.ApplicationWindow):
             dialog.destroy()
         main_grid.remove(progress_grid)
         main_grid.attach(scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
+        scroller.show_all()
         self.__source_view.grab_focus()
         self.buffer.place_cursor(self.buffer.get_start_iter())
         self.buffer.connect('changed', self.__on_buffer_changed)
@@ -248,7 +245,7 @@ class Editor(Gtk.ApplicationWindow):
         cancel_handler = self.__save_indicator.connect(
             'cancel-clicked', lambda b: cancellable.cancel()
         )
-        self.__save_indicator.show()
+        self.__save_indicator.show_all()
         saver = GtkSource.FileSaver(buffer=self.buffer, file=source_file)
         # TODO: Show progress
         saver.save_async(
@@ -342,14 +339,12 @@ class SaveIndicator(Gtk.Grid):
         )
 
         save_label = Gtk.Label(_('Saving…'))
-        save_label.show()
         self.add(save_label)
 
         save_cancel_button = Gtk.Button.new_with_label(_('Cancel'))
         save_cancel_button.connect(
             'clicked', lambda b: self.emit('cancel-clicked')
         )
-        save_cancel_button.show()
         self.add(save_cancel_button)
 
     @GObject.Signal

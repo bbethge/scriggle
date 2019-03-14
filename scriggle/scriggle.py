@@ -56,12 +56,12 @@ class Application(Gtk.Application):
         for file in files:
             editor = Editor(file)
             self.add_window(editor)
-            editor.show()
+            editor.show_all()
 
     def do_activate(self):
         editor = Editor()
         self.add_window(editor)
-        editor.show()
+        editor.show_all()
 
     def do_window_added(self, window):
         Gtk.Application.do_window_added(self, window)

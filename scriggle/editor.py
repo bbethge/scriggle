@@ -38,13 +38,11 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view = GtkSource.View(expand=True, monospace=True)
         scroller.add(self.__source_view)
         self.buffer.connect('mark-set', self.__on_mark_set)
-        self.__command_manager.set_can_undo(False)
-        self.buffer.connect(
-            'notify::can-undo',
-            lambda buffer_, pspec:
-                self.__command_manager.set_can_undo(buffer_.props.can_undo)
-        )
+        self.__command_manager.undo.enabled = False
+        self.buffer.connect('notify::can-undo', self.__forward_can_undo)
         self.__on_cursor_position_changed(self.buffer.get_start_iter())
+
+        SearchManager(self.__command_manager, self.__source_view)
 
         self.__command_manager.undo.connect(self.on_undo)
         self.__command_manager.cut.connect(self.on_cut)
@@ -286,6 +284,9 @@ class Editor(Gtk.ApplicationWindow):
         self.__save_indicator.hide()
         self.__save_indicator.disconnect(cancel_handler)
 
+    def __forward_can_undo(self, buffer_, pspec):
+        self.__command_manager.undo.enabled = buffer_.props.can_undo
+
     def on_undo(self):
         self.buffer.undo()
 
@@ -330,6 +331,127 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view.emit(
             'move-cursor', Gtk.MovementStep.WORDS, 1, False
         )
+
+
+class SearchManager:
+    def __init__(self, command_manager, view):
+        self.__command_manager = command_manager
+        self.__view = view
+        self.__buffer = view.props.buffer
+        self.__buffer.connect('mark-set', self.__mark_set_cb)
+        self.__search_context = GtkSource.SearchContext.new(
+            self.__buffer, None
+        )
+        self.__search_settings = self.__search_context.props.settings
+        self.__command_manager.find_next.connect(self.__on_find_next)
+        self.__command_manager.replace.connect(self.__on_replace)
+        self.__command_manager.replace.enabled = False
+        self.__command_manager.replace_all.connect(self.__on_replace_all)
+        self.__command_manager.replace_all.enabled = False
+        self.__command_manager.find_match_case.connect(
+            self.__on_find_match_case
+        )
+        self.__command_manager.find_regex.connect(self.__on_find_regex_changed)
+
+    def __on_find_next(self, text_to_find):
+        self.__search_settings.props.search_text = text_to_find
+        self.__find_current_search_text()
+
+    def __find_current_search_text(self):
+        self.__command_manager.find_next.enabled = False
+        self.__command_manager.replace.enabled = False
+        self.__command_manager.replace_all.enabled = False
+        self.__search_context.forward_async(
+            self.__buffer.get_iter_at_mark(self.__buffer.get_insert()),
+            None, lambda context, result: self.__find_finished_cb(result)
+        )
+
+    def __find_finished_cb(self, result):
+        matched, start, end, _wrapped = (
+            self.__search_context.forward_finish2(result)
+        )
+        if matched:
+            # First argument will be the insertion point -- we want that
+            # to be the end of the match.
+            self.__buffer.select_range(end, start)
+            self.__selection_changed_since_find = False
+            # Scroll to the start *and* the end to get as much as
+            # possible of the match into view.
+            # See the documentation of Gtk.TextView.scroll_to_iter for a
+            # possible issue about computing line heights.  Since we
+            # will almost certainly have fixed line heights, this
+            # shouldn’t be a problem.
+            self.__view.scroll_to_iter(start, 0.1, False, 0, 0)
+            self.__view.scroll_to_iter(end, 0.1, False, 0, 0)
+        self.__command_manager.replace.enabled = matched
+        self.__command_manager.replace_all.enabled = matched
+        self.__command_manager.find_next.enabled = True
+
+    def __mark_set_cb(self, buffer_, iter_, mark):
+        if mark.props.name in ('insert', 'selection_bound'):
+            self.__command_manager.replace.enabled = False
+
+    def __replacement_is_valid(self, replacement):
+        result = True
+        if self.__search_settings.props.regex_enabled:
+            try:
+                GLib.regex_check_replacement(replacement)
+            except GLib.Error as error:
+                if error.matches(
+                        GLib.regex_error_quark(), GLib.RegexError.REPLACE
+                ):
+                    result = False
+                else:
+                    raise
+        return result
+
+    def __on_replace(self, replacement):
+        # FIXME: Show user why replacement is invalid.
+        if self.__replacement_is_valid(replacement):
+            start, end = self.__buffer.get_selection_bounds()
+            self.__search_context.replace2(start, end, replacement, -1)
+            self.__find_current_search_text()
+
+    def __on_replace_all(self, text_to_find, replacement):
+        # XXX: Could the user conceivably edit the buffer while this is
+        #      happening?
+        # FIXME: Show user why replacement is invalid.
+        if self.__replacement_is_valid(replacement):
+            self.__search_settings.props.search_text = text_to_find
+            self.__command_manager.find_next.enabled = False
+            self.__command_manager.replace.enabled = False
+            self.__command_manager.replace_all.enabled = False
+            self.__buffer.begin_user_action()
+            self.__search_context.forward_async(
+                self.__buffer.get_start_iter(), None,
+                lambda context, result:
+                    self.__replace_all_finished_one_cb(result, replacement)
+            )
+
+    def __replace_all_finished_one_cb(self, result, replacement):
+        matched, start, end, wrapped = (
+            self.__search_context.forward_finish2(result)
+        )
+        if matched and not wrapped:
+            self.__search_context.replace2(start, end, replacement, -1)
+            GLib.idle_add(self.__replace_all_idle_cb, end, replacement)
+        else:
+            self.__buffer.end_user_action()
+            self.__command_manager.find_next.enabled = True
+
+    def __replace_all_idle_cb(self, start_iter, replacement):
+        self.__search_context.forward_async(
+            start_iter, None,
+            lambda context, result:
+                self.__replace_all_finished_one_cb(result, replacement)
+        )
+        return False
+
+    def __on_find_match_case(self, match_case):
+        self.__search_settings.props.case_sensitive = match_case
+
+    def __on_find_regex_changed(self, use_regex):
+        self.__search_settings.props.regex_enabled = use_regex
 
 
 class SaveIndicator(Gtk.Grid):

@@ -77,7 +77,8 @@ class CursorPositionLabel(Gtk.Label):
 class MenuStack(Gtk.Stack):
     def __init__(self, command_manager, **props):
         super().__init__(
-            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN, **props
+            transition_type=Gtk.StackTransitionType.OVER_UP_DOWN,
+            vhomogeneous=False, **props
         )
         self.__command_manager = command_manager
         self.__history = []

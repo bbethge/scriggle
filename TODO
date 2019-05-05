@@ -5,7 +5,7 @@ Show whether file is saved in window title
 Handle “file changed externally” error
 Add contexts and comments to translatable strings
 Show tooltips when a key is held down?
-Find and replace
+Allow using the left menu while editing strings for find and replace
 Adapt to different keyboard layouts
 Investigate whether Menu can call MenuStack.pin_menu to handle focus widgets
     instead of MenuStack handling them

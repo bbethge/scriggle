@@ -3,19 +3,19 @@ from gettext import gettext as _
 import gi
 from gi.repository import GLib, Gdk, Gtk, GtkSource
 
-from .menu import Menu
+from .menu import Menu, make_menu_class
 
 
 class Left(Menu):
     def __init__(self, command_manager):
         super().__init__(Menu.Side.LEFT, command_manager)
         undo = self.bind_key_to_action('z', _('Undo'), 'undo')
-        @command_manager.set_can_undo.connect
+        @command_manager.undo.enabled_connect
         def on_set_can_undo(can_undo):
             undo.props.sensitive = can_undo
         self.bind_key_to_action('x', _('Cut'), 'cut')
         self.bind_key_to_action('c', _('Copy'), 'copy')
-        self.bind_key_to_action('v', _('Paste'), 'opaste')
+        self.bind_key_to_action('v', _('Paste'), 'paste')
         self.bind_key_to_action(
             'e', '↑', 'up', _('Move the cursor up'), repeat=True
         )
@@ -53,7 +53,9 @@ class Right(Menu):
             'i', _('Close'), 'close', _('Close the current document')
         )
         self.bind_key_to_action('o', _('Open…'), 'open')
-        self.bind_key_to_action('j', _('Find'), 'find')
+        self.bind_key_to_submenu(
+            'j', _('Find…'), Find(command_manager), _("Find and replace")
+        )
         self.bind_key_to_action('k', _('Save'), 'save')
         self.add_unused_keys()
 
@@ -209,3 +211,67 @@ class LanguageList(Gtk.IconView):
     def __clear_search_string(self):
         self.__search_string = ''
         self.__search_timeout = 0
+
+
+class Find(make_menu_class(Gtk.Grid)):
+    __ROW_ENTRIES = 0
+    __ROW_KEYBOARD = 1
+    # TODO: Switch columns for right-to-left languages.
+    __COLUMN_FIND = 0
+    __COLUMN_REPLACE = 1
+    __N_COLUMNS = 2
+
+    def __init__(self, command_manager, **props):
+        super().__init__(Menu.Side.RIGHT, command_manager, **props)
+        self.__find_entry = Gtk.Entry()
+        self.__find_entry.props.placeholder_text = _('Text to find')
+        self.focus_widget = self.__find_entry
+        self.attach(
+            self.__find_entry, self.__COLUMN_FIND, self.__ROW_ENTRIES, 1, 1
+        )
+        self.__replace_entry = Gtk.Entry()
+        self.__replace_entry.props.placeholder_text = _('Replacement text')
+        self.attach(
+            self.__replace_entry, self.__COLUMN_REPLACE, self.__ROW_ENTRIES,
+            1, 1
+        )
+        self.__key_grid = Gtk.Grid()
+        self._set_grid(self.__key_grid)
+        self.attach(
+            self.__key_grid, 0, self.__ROW_KEYBOARD, self.__N_COLUMNS, 1
+        )
+        self.bind_key_to_widget('u', _('Text to find'), self.__find_entry)
+        self.bind_key_to_widget(
+            'o', _('Replacement text'), self.__replace_entry
+        )
+        self.bind_key_to_back_button('bracketright')
+        search = self.bind_key_to_callback(
+            'j', _('Find next'),
+            lambda: command_manager.find_next(self.__find_entry.props.text)
+        )
+        @command_manager.find_next.enabled_connect
+        def on_search_enabled_disabled(state):
+            search.props.sensitive = state
+        replace = self.bind_key_to_callback(
+            'k', _('Replace'),
+            lambda: command_manager.replace(self.__replace_entry.props.text)
+        )
+        @command_manager.replace.enabled_connect
+        def on_replace_enabled_disabled(state):
+            replace.props.sensitive = state
+        self.bind_key_to_toggle('l', _('Match case'), 'find_match_case')
+        self.bind_key_to_toggle(
+            'semicolon', _('Regular expression'), 'find_regex'
+        )
+        replace_all = self.bind_key_to_callback(
+            'comma', _('Replace all'),
+            lambda:
+                command_manager.replace_all(
+                    self.__find_entry.props.text,
+                    self.__replace_entry.props.text
+                )
+        )
+        @command_manager.replace_all.enabled_connect
+        def on_replace_all_enabled_disabled(state):
+            replace_all.props.sensitive = state
+        self.add_unused_keys()

@@ -5,6 +5,7 @@ from gi.repository import GLib, GObject, Gio, Gdk, Gtk, GtkSource
 
 from .command_manager import CommandManager
 from .menu_stack import MenuArea
+from . import py_async_glib
 
 
 class Editor(Gtk.ApplicationWindow):
@@ -66,31 +67,23 @@ class Editor(Gtk.ApplicationWindow):
             grid.attach(scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
             self.buffer.connect('changed', self.__on_buffer_changed)
         else:
-            hgrid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
-            label = Gtk.Label(_('Loading…'))
-            hgrid.add(label)
-            cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
-            hgrid.add(cancel_button)
-            grid.attach(hgrid, 0, self.__ROW_TEXT_VIEW, 1, 1)
+            self.__load(file, grid, scroller)
 
-            cancellable = Gio.Cancellable()
-            source_file = GtkSource.File(location=file)
-            loader = GtkSource.FileLoader(buffer=self.buffer, file=source_file)
-            # TODO: Show progress
-            loader.load_async(
-                GLib.PRIORITY_DEFAULT, cancellable, None, None,
-                lambda loader, result:
-                    self.__finish_loading(
-                        loader, result, grid, hgrid, scroller
-                    )
-            )
-            cancel_button.connect('clicked', lambda b: cancellable.cancel())
-
-    def __finish_loading(
-            self, loader, result, main_grid, progress_grid, scroller
-    ):
+    @py_async_glib.wrap
+    async def __load(self, file, main_grid, scroller):
+        progress_grid = Gtk.Grid(orientation=Gtk.Orientation.HORIZONTAL)
+        label = Gtk.Label(_('Loading…'))
+        progress_grid.add(label)
+        cancel_button = Gtk.Button.new_from_stock(Gtk.STOCK_CANCEL)
+        progress_grid.add(cancel_button)
+        main_grid.attach(progress_grid, 0, self.__ROW_TEXT_VIEW, 1, 1)
+        cancellable = Gio.Cancellable()
+        source_file = GtkSource.File(location=file)
+        loader = GtkSource.FileLoader(buffer=self.buffer, file=source_file)
+        cancel_button.connect('clicked', lambda b: cancellable.cancel())
+        # TODO: Show progress
         try:
-            loader.load_finish(result)
+            await loader.load_pyasync(GLib.PRIORITY_DEFAULT, cancellable, None)
         except GLib.Error as error:
             message = (
                 _('Unable to load “{filename}”: {message}')
@@ -226,7 +219,8 @@ class Editor(Gtk.ApplicationWindow):
         # TODO
         print(f'Find “{needle}”')
 
-    def on_save(self):
+    @py_async_glib.wrap
+    async def on_save(self):
         if self.__file is None:
             chooser = Gtk.FileChooserNative.new(
                 _('Save As…'), self, Gtk.FileChooserAction.SAVE, None, None
@@ -246,14 +240,8 @@ class Editor(Gtk.ApplicationWindow):
         self.__save_indicator.show_all()
         saver = GtkSource.FileSaver(buffer=self.buffer, file=source_file)
         # TODO: Show progress
-        saver.save_async(
-            GLib.PRIORITY_DEFAULT, cancellable, None, None,
-            self.__finish_saving, cancel_handler
-        )
-
-    def __finish_saving(self, saver, result, cancel_handler):
         try:
-            saver.save_finish(result)
+            await saver.save_pyasync(GLib.PRIORITY_DEFAULT, cancellable, None)
         except GLib.Error as error:
             message = (
                 _('Unable to save file “{filename}”: {message}')
@@ -357,18 +345,15 @@ class SearchManager:
         self.__search_settings.props.search_text = text_to_find
         self.__find_current_search_text()
 
-    def __find_current_search_text(self):
+    @py_async_glib.wrap
+    async def __find_current_search_text(self):
         self.__command_manager.find_next.enabled = False
         self.__command_manager.replace.enabled = False
         self.__command_manager.replace_all.enabled = False
-        self.__search_context.forward_async(
-            self.__buffer.get_iter_at_mark(self.__buffer.get_insert()),
-            None, lambda context, result: self.__find_finished_cb(result)
-        )
-
-    def __find_finished_cb(self, result):
         matched, start, end, _wrapped = (
-            self.__search_context.forward_finish2(result)
+            await self.__search_context.forward_pyasync(
+                self.__buffer.get_iter_at_mark(self.__buffer.get_insert()), None
+            )
         )
         if matched:
             # First argument will be the insertion point -- we want that
@@ -412,7 +397,8 @@ class SearchManager:
             self.__search_context.replace2(start, end, replacement, -1)
             self.__find_current_search_text()
 
-    def __on_replace_all(self, text_to_find, replacement):
+    @py_async_glib.wrap
+    async def __on_replace_all(self, text_to_find, replacement):
         # XXX: Could the user conceivably edit the buffer while this is
         #      happening?
         # FIXME: Show user why replacement is invalid.
@@ -422,30 +408,18 @@ class SearchManager:
             self.__command_manager.replace.enabled = False
             self.__command_manager.replace_all.enabled = False
             self.__buffer.begin_user_action()
-            self.__search_context.forward_async(
-                self.__buffer.get_start_iter(), None,
-                lambda context, result:
-                    self.__replace_all_finished_one_cb(result, replacement)
-            )
-
-    def __replace_all_finished_one_cb(self, result, replacement):
-        matched, start, end, wrapped = (
-            self.__search_context.forward_finish2(result)
-        )
-        if matched and not wrapped:
-            self.__search_context.replace2(start, end, replacement, -1)
-            GLib.idle_add(self.__replace_all_idle_cb, end, replacement)
-        else:
+            while True:
+                matched, start, end, wrapped = (
+                    await self.__search_context.forward_pyasync(
+                        self.__buffer.get_start_iter(), None
+                    )
+                )
+                if (not matched) or wrapped:
+                    break
+                self.__search_context.replace2(start, end, replacement, -1)
+                await py_async_glib.idle()
             self.__buffer.end_user_action()
             self.__command_manager.find_next.enabled = True
-
-    def __replace_all_idle_cb(self, start_iter, replacement):
-        self.__search_context.forward_async(
-            start_iter, None,
-            lambda context, result:
-                self.__replace_all_finished_one_cb(result, replacement)
-        )
-        return False
 
     def __on_find_match_case(self, match_case):
         self.__search_settings.props.case_sensitive = match_case

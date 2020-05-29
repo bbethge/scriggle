@@ -36,7 +36,11 @@ class Editor(Gtk.ApplicationWindow):
             shadow_type=Gtk.ShadowType.IN, expand=True
         )
 
-        self.__source_view = GtkSource.View(expand=True, monospace=True)
+        self.__source_view = GtkSource.View(
+            expand=True, monospace=True, show_right_margin=True,
+            smart_backspace=True, auto_indent=True,
+            smart_home_end=GtkSource.SmartHomeEndType.BEFORE
+        )
         scroller.add(self.__source_view)
         self.buffer.connect('mark-set', self.__on_mark_set)
         self.__command_manager.undo.enabled = False
@@ -55,6 +59,31 @@ class Editor(Gtk.ApplicationWindow):
         self.__command_manager.right.connect(self.on_right)
         self.__command_manager.left_word.connect(self.on_left_word)
         self.__command_manager.right_word.connect(self.on_right_word)
+        self.__command_manager.selection_start_up.connect(
+            self.on_selection_start_up
+        )
+        self.__command_manager.selection_start_down.connect(
+            self.on_selection_start_down
+        )
+        self.__command_manager.selection_end_up.connect(
+            self.on_selection_end_up
+        )
+        self.__command_manager.selection_end_down.connect(
+            self.on_selection_end_down
+        )
+        self.__command_manager.selection_start_left.connect(
+            self.on_selection_start_left
+        )
+        self.__command_manager.selection_start_right.connect(
+            self.on_selection_start_right
+        )
+        self.__command_manager.selection_end_left.connect(
+            self.on_selection_end_left
+        )
+        self.__command_manager.selection_end_right.connect(
+            self.on_selection_end_right
+        )
+        self.__command_manager.select_all.connect(self.on_select_all)
         self.__command_manager.new.connect(self.on_new)
         self.__command_manager.close.connect(self.on_close)
         self.__command_manager.open.connect(self.on_open)
@@ -318,6 +347,60 @@ class Editor(Gtk.ApplicationWindow):
     def on_right_word(self):
         self.__source_view.emit(
             'move-cursor', Gtk.MovementStep.WORDS, 1, False
+        )
+
+    def on_select_all(self):
+        self.__source_view.emit('select-all', True)
+
+    def __move_selection_edge(self, edge, iter_transform):
+        """
+        Move an edge (start or end) of the selection.
+
+        If ‘edge’ is 0, move the start; if ‘edge’ is 1, move the end.
+        iter_transform is a function that takes a Gtk.TextIter,
+        optionally modifies it, and returns True if it was modified.
+        If the motion would go past the other edge of the selection,
+        only go as far as the other edge, leaving no selection.
+        """
+        sel = self.buffer.get_selection_bounds()
+        if sel == ():
+            ins = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+            sel = [ins, ins.copy()]
+        if iter_transform(sel[edge]):
+            if sel[0].compare(sel[1]) == 1:
+                sel[edge].assign(sel[1-edge])
+            self.buffer.select_range(sel[0], sel[1])
+
+    def on_selection_start_down(self):
+        self.__move_selection_edge(0, self.__source_view.forward_display_line)
+
+    def on_selection_start_up(self):
+        self.__move_selection_edge(0, self.__source_view.backward_display_line)
+
+    def on_selection_end_down(self):
+        self.__move_selection_edge(1, self.__source_view.forward_display_line)
+
+    def on_selection_end_up(self):
+        self.__move_selection_edge(1, self.__source_view.backward_display_line)
+
+    def on_selection_start_left(self):
+        self.__move_selection_edge(
+            0, lambda it: self.__source_view.move_visually(it, -1)
+        )
+
+    def on_selection_start_right(self):
+        self.__move_selection_edge(
+            0, lambda it: self.__source_view.move_visually(it, 1)
+        )
+
+    def on_selection_end_left(self):
+        self.__move_selection_edge(
+            1, lambda it: self.__source_view.move_visually(it, -1)
+        )
+
+    def on_selection_end_right(self):
+        self.__move_selection_edge(
+            1, lambda it: self.__source_view.move_visually(it, 1)
         )
 
 

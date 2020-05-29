@@ -36,6 +36,54 @@ class Left(Menu):
             'r', _('→ Word'), 'right_word',
             _('Move the cursor right by a word'), repeat=True
         )
+        self.bind_key_to_submenu(
+            't', _('Selection…'), Selection(command_manager),
+            _('Commands to change the selection')
+        )
+        self.add_unused_keys()
+
+
+class Selection(Menu):
+    def __init__(self, command_manager):
+        super().__init__(Menu.Side.LEFT, command_manager)
+        self.bind_key_to_back_button('q')
+        self.bind_key_to_action(
+        	'w', '↧ Selection', 'selection_start_down',
+        	_('Contract selection at the start by one line'), repeat=True
+    	)
+        self.bind_key_to_action(
+            'e', '⤒ Selection', 'selection_start_up',
+            _('Extend the selection up one line'), repeat=True
+        )
+        self.bind_key_to_action(
+        	'r', 'Select All', 'select_all', _('Select the entire file')
+    	)
+        self.bind_key_to_action(
+            'a', '⇤ Selection', 'selection_start_left',
+            _('Move the selection start to the left'), repeat=True
+        )
+        self.bind_key_to_action(
+            's', '↦ Selection', 'selection_start_right',
+            _('Move the selection start to the right'),
+            repeat=True
+        )
+        self.bind_key_to_action(
+            'd', 'Selection ↤', 'selection_end_left',
+            _('Move the selection end to the left'),
+            repeat=True
+        )
+        self.bind_key_to_action(
+            'f', 'Selection ⇥', 'selection_end_right',
+            _('Move the selection end to the right'), repeat=True
+        )
+        self.bind_key_to_action(
+        	'x', '↥ Selection', 'selection_end_up',
+        	_('Contract the selection at the end by one line'), repeat=True
+    	)
+        self.bind_key_to_action(
+            'c', '⤓ Selection', 'selection_end_down',
+            _('Extend the selection down one line'), repeat=True
+        )
         self.add_unused_keys()
 
 

@@ -1,7 +1,4 @@
-Status area: source type, indentation settings
-    OR: No status area, menu takes space away from text view when shown
 Test file operation status indicators
-Show whether file is saved in window title
 Handle “file changed externally” error
 Add contexts and comments to translatable strings
 Show tooltips when a key is held down?
@@ -13,5 +10,4 @@ Strip trailing whitespace
 Automatically detect language
 Automatically detect indentation settings
 Configure style settings per language and per directory
-Right margin
 Reference ‘parent’ instead of passing a reference to the constructor?

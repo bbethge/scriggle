@@ -65,25 +65,31 @@ class Application(Gtk.Application):
 
     def do_window_added(self, window):
         Gtk.Application.do_window_added(self, window)
+        if window.filename is None:
+            window.__window_number = self.__unnamed_window_number
+            self.__unnamed_window_number += 1
+        self.__refresh_window_title(window)
+        window.connect(
+            'notify::modified', lambda w, p: self.__refresh_window_title(w)
+        )
+
+    def __refresh_window_title(self, window):
+        title = self.__get_display_filename(window)
+        if window.props.modified:
+            title = '✍ ' + title
+        window.props.title = title
+
+    def __get_display_filename(self, window):
         windows = self.get_windows()
         if window.filename is None:
-            window.props.title = _('New File {:d}').format(
-                self.__unnamed_window_number
-            )
-            self.__unnamed_window_number += 1
+            return _('New File {:d}').format(window.__window_number)
         else:
             basenames = self.__get_basenames(window)
             basename = GLib.path_get_basename(window.filename)
             if basename in basenames:
-                for w in windows:
-                    self.__maybe_set_window_title(w, basename)
+                return home_substitute(window.filename)
             else:
-                window.props.title = basename
-
-    @staticmethod
-    def __maybe_set_window_title(window, basename):
-        if (GLib.path_get_basename(window.filename) == basename):
-            window.props.title = home_substitute(window.filename)
+                return basename
 
     def __get_basenames(self, window):
         """
@@ -97,16 +103,8 @@ class Application(Gtk.Application):
 
     def do_window_removed(self, window):
         Gtk.Application.do_window_removed(self, window)
-        if window.filename is None:
-            return
-        basename = GLib.path_get_basename(window.filename)
-        other_windows = [
-            w for w in self.get_windows()
-            if w.filename is not None and w is not window
-                and GLib.path_get_basename(w.filename) == basename
-        ]
-        if len(other_windows) == 1:
-            other_windows[0].props.title = basename
+        for w in self.get_windows():
+            self.__refresh_window_title(w)
 
     def show_open_dialog(self, window):
         chooser = Gtk.FileChooserNative(

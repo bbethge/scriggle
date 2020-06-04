@@ -19,7 +19,6 @@ class Editor(Gtk.ApplicationWindow):
             **props
         )
         self.__file = file
-        self.__saved = True
         self.__close_after_save = False
         self.__command_manager = CommandManager()
 
@@ -43,6 +42,7 @@ class Editor(Gtk.ApplicationWindow):
         )
         scroller.add(self.__source_view)
         self.buffer.connect('mark-set', self.__on_mark_set)
+        self.buffer.connect('modified-changed', self.__on_modified_changed)
         self.__command_manager.undo.enabled = False
         self.buffer.connect('notify::can-undo', self.__forward_can_undo)
         self.__on_cursor_position_changed(self.buffer.get_start_iter())
@@ -95,6 +95,7 @@ class Editor(Gtk.ApplicationWindow):
         if file is None:
             grid.attach(scroller, 0, self.__ROW_TEXT_VIEW, 1, 1)
             self.buffer.connect('changed', self.__on_buffer_changed)
+            self.buffer.set_modified(False)
         else:
             self.__load(file, grid, scroller)
 
@@ -134,6 +135,7 @@ class Editor(Gtk.ApplicationWindow):
         self.__source_view.grab_focus()
         self.buffer.place_cursor(self.buffer.get_start_iter())
         self.buffer.connect('changed', self.__on_buffer_changed)
+        self.buffer.set_modified(False)
 
     @property
     def buffer(self):
@@ -145,6 +147,12 @@ class Editor(Gtk.ApplicationWindow):
             return None
         else:
             return self.__file.get_path()
+
+    @GObject.Property(
+        type=bool, flags=GObject.ParamFlags.READABLE, default=False
+    )
+    def modified(self):
+        return self.buffer.get_modified()
 
     @property
     def menu_revealer(self):
@@ -173,10 +181,12 @@ class Editor(Gtk.ApplicationWindow):
         if mark.props.name == 'insert':
             self.__on_cursor_position_changed(location)
 
+    def __on_modified_changed(self, _buffer):
+        self.notify('modified')
+
     def __on_buffer_changed(self, buffer):
         location = buffer.get_iter_at_mark(buffer.get_insert())
         self.__on_cursor_position_changed(location)
-        self.__saved = False
 
     def __on_cursor_position_changed(self, location):
         self.__menu_revealer.cursor_position = (
@@ -205,7 +215,7 @@ class Editor(Gtk.ApplicationWindow):
         return True
 
     def on_close(self):
-        if not self.__saved:
+        if not self.buffer.get_modified():
             DISCARD = 0
             SAVE = 1
             dialog = Gtk.MessageDialog(
@@ -243,10 +253,6 @@ class Editor(Gtk.ApplicationWindow):
 
     def on_open(self):
         self.props.application.show_open_dialog(self)
-
-    def on_find(self, needle):
-        # TODO
-        print(f'Find “{needle}”')
 
     @py_async_glib.wrap
     async def on_save(self):
@@ -291,7 +297,7 @@ class Editor(Gtk.ApplicationWindow):
             self.__save_terminated(cancel_handler)
             return
         self.__save_terminated(cancel_handler)
-        self.__saved = True
+        self.buffer.set_modified(False)
         if self.__close_after_save:
             self.__finish_close()
             self.__close_after_save = False
